@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 
 type Credentials = { id: string; email: string; password: string };
@@ -39,6 +39,17 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
+async function photoDimensions(image: Locator) {
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  return image.evaluate((element) => ({
+    width: (element as HTMLImageElement).naturalWidth,
+    height: (element as HTMLImageElement).naturalHeight,
+  }));
+}
+
 let cleanupAfterTest: (() => Promise<void>) | undefined;
 
 test.afterEach(async () => {
@@ -47,7 +58,7 @@ test.afterEach(async () => {
   await cleanup?.();
 });
 
-test('real photo suggestions preserve owner review and create only selected private drafts', async ({
+test('real photo review saves selected item crops and editable pickup area defaults', async ({
   browser,
   baseURL,
 }, info) => {
@@ -163,6 +174,23 @@ test('real photo suggestions preserve owner review and create only selected priv
     expect(originalCount).toBeLessThanOrEqual(12);
     expect(scanId).toMatch(/^[0-9a-f-]{36}$/);
 
+    // A detected tool gets its own close-up, while the complete image remains available.
+    const detectedCloseUp = page.getByRole('img', { name: /^Item 1: / });
+    await expect(detectedCloseUp).toBeVisible();
+    await expect(detectedCloseUp).toHaveJSProperty('tagName', 'svg');
+    const reviewCrop = (await detectedCloseUp.getAttribute('viewBox'))!.split(' ').map(Number);
+    const originalSize = {
+      width: Number(await detectedCloseUp.locator('image').getAttribute('width')),
+      height: Number(await detectedCloseUp.locator('image').getAttribute('height')),
+    };
+    expect(reviewCrop).toHaveLength(4);
+    expect(reviewCrop[2] * reviewCrop[3]).toBeLessThan(originalSize.width * originalSize.height);
+    await page.getByText('See full photo and all items', { exact: true }).click();
+    await expect(
+      page.getByRole('img', { name: 'Your materials with numbered review boxes', exact: true }),
+    ).toBeVisible();
+    await page.getByText('See full photo and all items', { exact: true }).click();
+
     await candidates.first().getByRole('textbox').fill(correctedTitle);
     await candidates.first().getByRole('combobox').selectOption('craft');
     for (let index = 1; index < originalCount; index++)
@@ -178,6 +206,13 @@ test('real photo suggestions preserve owner review and create only selected priv
     await candidates.last().getByRole('textbox').fill(manualTitle);
     await candidates.last().getByRole('combobox').selectOption('containers');
     await expect(candidates.last().getByRole('checkbox')).toBeChecked();
+    await candidates.last().getByRole('textbox').focus();
+    const manualPreview = page.getByRole('img', {
+      name: `Item ${originalCount}: ${manualTitle}`,
+      exact: true,
+    });
+    await expect(manualPreview).toHaveJSProperty('tagName', 'IMG');
+    expect(await photoDimensions(manualPreview)).toEqual(originalSize);
     await expect(page.getByRole('status')).toContainText('Item review saved privately');
     await expect(
       page.getByRole('button', { name: 'Continue with 2 items', exact: true }),
@@ -209,7 +244,7 @@ test('real photo suggestions preserve owner review and create only selected priv
     expect(createdIds).toHaveLength(2);
     const { data: drafts, error } = await admin
       .from('resources')
-      .select('id,title,category,status,candidate_id')
+      .select('id,title,category,status,candidate_id,image_path')
       .eq('scan_id', scanId)
       .eq('owner_id', fixture.accounts.owner.id);
     expect(error).toBeNull();
@@ -222,6 +257,78 @@ test('real photo suggestions preserve owner review and create only selected priv
       ]),
     );
     expect(drafts?.find((draft) => draft.title === manualTitle)?.candidate_id).toMatch(/^manual:/);
+
+    const { data: assets, error: assetError } = await admin
+      .from('image_assets')
+      .select('storage_path,width,height')
+      .eq('scan_id', scanId)
+      .eq('owner_id', fixture.accounts.owner.id)
+      .eq('kind', 'listing');
+    expect(assetError).toBeNull();
+    const detectedDraft = drafts!.find((draft) => draft.title === correctedTitle)!;
+    const manualDraft = drafts!.find((draft) => draft.title === manualTitle)!;
+    const detectedAsset = assets!.find((asset) => asset.storage_path === detectedDraft.image_path)!;
+    const manualAsset = assets!.find((asset) => asset.storage_path === manualDraft.image_path)!;
+    const croppedSize = { width: detectedAsset.width, height: detectedAsset.height };
+    expect(croppedSize).toEqual({ width: reviewCrop[2], height: reviewCrop[3] });
+    expect({ width: manualAsset.width, height: manualAsset.height }).toEqual(originalSize);
+    expect(detectedDraft.image_path).not.toEqual(manualDraft.image_path);
+    expect(await photoDimensions(page.locator('.editor-preview .card-image img'))).toEqual(
+      croppedSize,
+    );
+    const croppedPreview = page.locator('.editor-preview .card-image img');
+    await expect(croppedPreview).toHaveCSS('object-fit', 'contain');
+    await croppedPreview.hover();
+    await expect(croppedPreview).toHaveCSS('transform', 'none');
+
+    const area = page.getByLabel('Public pickup area', { exact: true });
+    const areaOptions = await area
+      .locator('option')
+      .evaluateAll((options) =>
+        options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+      );
+    expect(areaOptions.length).toBeGreaterThanOrEqual(3);
+    await area.selectOption(areaOptions[0]);
+    await page
+      .getByLabel('What’s included?', { exact: true })
+      .fill('A reviewed sample tool for an automated demo check.');
+    const itemTabs = page.getByLabel('Selected item drafts', { exact: true });
+    await itemTabs.getByRole('button', { name: `2. ${manualTitle}`, exact: true }).click();
+    await expect(page.getByLabel('Resource title', { exact: true })).toHaveValue(manualTitle);
+    await expect(area).toHaveValue(areaOptions[0]);
+    expect(await photoDimensions(page.locator('.editor-preview .card-image img'))).toEqual(
+      originalSize,
+    );
+    await area.selectOption(areaOptions[1]);
+    await page
+      .getByLabel('What’s included?', { exact: true })
+      .fill('An added sample item for an automated demo check.');
+    await itemTabs.getByRole('button', { name: `1. ${correctedTitle}`, exact: true }).click();
+    await expect(page.getByLabel('Resource title', { exact: true })).toHaveValue(correctedTitle);
+    await expect(area).toHaveValue(areaOptions[0]);
+    await area.selectOption(areaOptions[2]);
+    await itemTabs.getByRole('button', { name: `2. ${manualTitle}`, exact: true }).click();
+    await expect(page.getByLabel('Resource title', { exact: true })).toHaveValue(manualTitle);
+    await expect(area).toHaveValue(areaOptions[1]);
+
+    await page.reload();
+    await expect(page.getByLabel('Resource title', { exact: true })).toHaveValue(correctedTitle);
+    await expect(area).toHaveValue(areaOptions[2]);
+    await itemTabs.getByRole('button', { name: `2. ${manualTitle}`, exact: true }).click();
+    await expect(page.getByLabel('Resource title', { exact: true })).toHaveValue(manualTitle);
+    await expect(area).toHaveValue(areaOptions[1]);
+    await page.getByRole('button', { name: 'Review before publishing', exact: true }).click();
+    await expect(page.locator('.publication-card')).toHaveCount(2);
+    expect(
+      await photoDimensions(page.locator('.publication-card').nth(0).locator('.card-image img')),
+    ).toEqual(croppedSize);
+    await expect(page.locator('.publication-card').nth(0).locator('.card-image img')).toHaveCSS(
+      'object-fit',
+      'contain',
+    );
+    expect(
+      await photoDimensions(page.locator('.publication-card').nth(1).locator('.card-image img')),
+    ).toEqual(originalSize);
     await capture(page, info, 'scan-review-selected-private-drafts');
     expect(runtimeErrors).toEqual([]);
     mkdirSync('output/qa', { recursive: true });
@@ -239,6 +346,11 @@ test('real photo suggestions preserve owner review and create only selected priv
             'deselected and removed suggestions stay excluded after reload',
             'manual addition survives reload',
             'only two selected items create private drafts with corrected fields',
+            'detected item close-up and saved derivative match the selected box',
+            'manual item without bounds retains the full image',
+            'first pickup area fills the other item automatically',
+            'individual pickup area override survives first-item changes and reload',
+            'publication preview uses the separate cropped and full-photo derivatives',
             'no browser runtime errors',
           ],
           cleanup:

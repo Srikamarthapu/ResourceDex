@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-09-12T21:15:09.942Z",
+  "server": "http://localhost:3012",
+  "checks": [
+    "original logo loaded with matching background",
+    "connected hosted catalog",
+    "desktop and 320px layout",
+    "account 320px layout",
+    "app icon serves embedded supplied image",
+    "no page runtime errors"
+  ]
+}

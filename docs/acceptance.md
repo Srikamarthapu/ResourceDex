@@ -74,7 +74,7 @@ Closed browser finding: initial Share editor area options were absent after a de
 
 Supporting engineering evidence: [type/lint/unit/build record](../output/qa/validation.json), [live vision smoke](../output/qa/gemini-smoke.json), [photo pipeline/privacy checks](../output/qa/photo-pipeline-smoke.json), [File Search capability smoke](../output/qa/file-search-smoke.json). The recorded models are `gemini-3.5-flash` for image detection and `gemini-3.8-flash` for the File Search smoke. A single photo and a four-entry starter corpus do not satisfy held-out accuracy, source-review or grounded-guidance release gates.
 
-Remaining release work includes the reviewed 20–30 source corpus and complete grounded-guidance/approval/revision flow; the required held-out photo/reference evaluation; hosted HTTPS account lifecycle testing; full moderation/operator, retention/account-deletion workflows; and remaining concurrency, failure, combined-filter/pagination and measured performance cases. Consult the gate tables rather than treating the passing demo as full P0 acceptance.
+Remaining release work includes the reviewed 20–30 source corpus and complete grounded-guidance/approval/revision flow; the required held-out photo/reference evaluation; hosted HTTPS account lifecycle testing; full moderation/operator and scheduled retention workflows; and remaining concurrency, failure, combined-filter/pagination and measured performance cases. Consult the gate tables rather than treating the passing demo as full P0 acceptance.
 
 ## Constraints to preserve during implementation
 

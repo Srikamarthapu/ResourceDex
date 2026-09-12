@@ -145,13 +145,12 @@ main:focus {
   white-space: nowrap;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
-  background: var(--green);
-  color: #f6f8ed;
-  width: 37px;
-  height: 39px;
-  border-radius: 11px 11px 11px 3px;
+  width: 48px;
+  height: 41px;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* Preserve the supplied artwork; only its white areas take on the paper color. */
+  mix-blend-mode: darken;
 }
 .brand-light {
   font-weight: 460;
@@ -783,6 +782,12 @@ main:focus {
 .resource-card:hover .card-image > img {
   transform: scale(1.035);
 }
+.card-image.preserve-photo > img {
+  object-fit: contain;
+}
+.resource-card:hover .card-image.preserve-photo > img {
+  transform: none;
+}
 .card-image > .image-fallback {
   height: 100%;
   display: grid;
@@ -949,6 +954,9 @@ main:focus {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.detail-photo.preserve-photo img {
+  object-fit: contain;
 }
 .photo-caption {
   display: flex;
@@ -1145,6 +1153,22 @@ main:focus {
 .auth-card form {
   display: grid;
   gap: 17px;
+}
+.account-deletion {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.account-deletion h3 {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+.account-deletion p {
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.account-deletion form {
+  margin-top: 18px;
 }
 .form-field {
   display: grid;
@@ -1987,12 +2011,8 @@ main:focus {
     gap: 8px;
   }
   .brand-mark {
-    width: 32px;
-    height: 35px;
-    border-radius: 9px 9px 9px 2px;
-  }
-  .brand-mark svg {
-    width: 20px;
+    width: 38px;
+    height: 33px;
   }
   .desktop-nav {
     display: none;

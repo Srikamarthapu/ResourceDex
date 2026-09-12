@@ -8,6 +8,7 @@ import { useApp } from './app-provider';
 import { Loading, Notice } from './ui';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import { errorMessage } from '@/lib/format';
+import { AccountDeletionPanel } from './account-deletion-panel';
 
 type AuthMode = 'signin' | 'signup' | 'recover' | 'update';
 export function AccountView() {
@@ -133,9 +134,9 @@ export function AccountView() {
               </button>
             </div>
             <p className="auth-fineprint">
-              For pilot account deletion, contact your pilot organizer.{' '}
               <Link href="/privacy">Read the data-handling notice.</Link>
             </p>
+            <AccountDeletionPanel />
           </>
         ) : (
           <>
@@ -150,6 +151,9 @@ export function AccountView() {
                     : 'Sign in to give good materials a second beginning.'}
             </p>
             <div className="notice-stack">
+              {params.get('deleted') === '1' && (
+                <Notice>Your account and its ResourceDex data have been deleted.</Notice>
+              )}
               {!configured && <Notice>Accounts are available once Supabase is connected.</Notice>}
               {error && <Notice error>{error}</Notice>}
               {message && (

@@ -91,12 +91,12 @@ The default unit suite skips the two opt-in live Gemini tests. Their commands an
 
 ## Current scope
 
-The working implementation includes real accounts, private photo normalization/cropping, Gemini object suggestions, durable owner review and drafts, reviewed publication, filtering and search, owner management, requests, reservation, private pickup revisions, completion history, and report submission. Styling is responsive, uses local fonts, and includes keyboard-accessible controls. Sample photo attribution is in [docs/photo-credits.md](docs/photo-credits.md).
+The working implementation includes real accounts, self-service account deletion, private photo normalization/cropping, Gemini object suggestions, durable owner review and drafts, reviewed publication, filtering and search, owner management, requests, reservation, private pickup revisions, completion history, and report submission. Photo batches inherit the first item's pickup area while preserving individual choices, and detected items use separate cropped photos. Styling is responsive, uses local fonts, and includes keyboard-accessible controls. Sample photo attribution is in [docs/photo-credits.md](docs/photo-credits.md).
 
 The following remain before the complete PRD pilot is ready:
 
 - Runtime source-grounded reuse guidance, approved corpus expansion, immutable claim evidence, and the required comparison evaluation. File Search has passed a technical capability check, but listing guidance stays unavailable until its evidence contract is implemented.
 - Held-out photo evaluation, the full accessibility/device matrix, seeded-load performance checks, and deployed HTTPS/end-to-end email delivery verification.
-- Scheduled retention and orphan cleanup, resource/account deletion workflows, operator moderation interface, and remaining non-AI abuse controls.
+- Scheduled retention and orphan cleanup, individual resource deletion, operator moderation interface, and remaining non-AI abuse controls.
 
 The app never treats a suggested identity as a verified material, dimension, condition, or safety certification. It does not claim the full PRD has passed because one live model request or a local build succeeded.

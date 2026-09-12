@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowUpRight, Boxes, Compass, Inbox, Leaf, LogOut, Plus, UserRound } from 'lucide-react';
 import { useApp } from './app-provider';
@@ -27,9 +28,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="site-header">
         <div className="header-inner">
           <Link href="/" className="brand" aria-label="ResourceDex home">
-            <span className="brand-mark">
-              <Boxes size={22} strokeWidth={1.7} />
-            </span>
+            <Image
+              className="brand-mark"
+              src="/images/brand/resourcedex-logo.png"
+              alt=""
+              width={48}
+              height={41}
+              unoptimized
+            />
             <span>
               resource<span className="brand-light">dex</span>
               <span className="brand-dot">.</span>

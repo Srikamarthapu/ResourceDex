@@ -22,7 +22,7 @@ export function ResourceCard({
         href={href || `/resources/${resource.id}`}
         aria-label={`${resource.title}, free, ${area}${resource.is_sample ? ', sample listing' : ''}`}
       >
-        <div className="card-image">
+        <div className={`card-image${resource.scan_id ? ' preserve-photo' : ''}`}>
           {imageUrl ? (
             <img
               src={imageUrl}

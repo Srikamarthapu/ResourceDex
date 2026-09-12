@@ -5,8 +5,7 @@ export default function PrivacyPage() {
       <h1 style={{ marginTop: 15 }}>A clear place for your data.</h1>
       <p>
         This is an implementation pilot. The information below explains the app’s current data flow.
-        Complete retention and account-deletion operations must be validated before inviting
-        external community members.
+        Automatic retention cleanup is still being prepared for the community release.
       </p>
       <h2>What stays private</h2>
       <p>
@@ -41,8 +40,12 @@ export default function PrivacyPage() {
         data must be removed by the project operator.
       </p>
       <p>
-        Contact the organizer who invited you to the pilot for account or data deletion. A
-        self-service account deletion flow is not available in this build.
+        You can permanently delete your account from the Account page after confirming your
+        password. This removes your account, photos, drafts, listings, requests, and pickup details.
+        Requests on your listings are also removed, and reservations you hold on other listings are
+        released. If cleanup is interrupted, your listings stay hidden and you can retry from the
+        Account page to finish. Downloaded copies cannot be recalled; provider backups and
+        operational logs follow their own retention periods.
       </p>
       <h2>Community guidelines</h2>
       <ul>

@@ -157,7 +157,7 @@ export function ResourceDetail({ id }: { id: string }) {
       )}
       <div className="detail-layout">
         <div>
-          <div className="detail-photo">
+          <div className={`detail-photo${resource.scan_id ? ' preserve-photo' : ''}`}>
             {imageUrl ? (
               <img src={imageUrl} alt={resource.image_alt} width={800} height={800} />
             ) : (

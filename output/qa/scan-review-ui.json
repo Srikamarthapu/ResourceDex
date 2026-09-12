@@ -1,7 +1,7 @@
 {
-  "testedAt": "2026-09-12T20:01:42.230Z",
+  "testedAt": "2026-09-12T21:15:58.309Z",
   "appUrl": "http://localhost:3012",
-  "originalCandidateCount": 5,
+  "originalCandidateCount": 4,
   "createdDraftCount": 2,
   "checks": [
     "explicit Google consent before real image identification",
@@ -9,6 +9,11 @@
     "deselected and removed suggestions stay excluded after reload",
     "manual addition survives reload",
     "only two selected items create private drafts with corrected fields",
+    "detected item close-up and saved derivative match the selected box",
+    "manual item without bounds retains the full image",
+    "first pickup area fills the other item automatically",
+    "individual pickup area override survives first-item changes and reload",
+    "publication preview uses the separate cropped and full-photo derivatives",
     "no browser runtime errors"
   ],
   "cleanup": "Only this scan, its private drafts and image derivatives are removed. Nothing is published.",

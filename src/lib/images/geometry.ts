@@ -8,6 +8,14 @@ export type PixelBox = {
   height: number;
 };
 
+/** Never turn missing or malformed AI localization into an invented crop. */
+export function validItemBounds(bounds: Bounds | null | undefined): Bounds | null {
+  if (!bounds) return null;
+  const values = [bounds.x_min, bounds.y_min, bounds.x_max, bounds.y_max];
+  if (values.some((value) => !Number.isInteger(value) || value < 0 || value > 1000)) return null;
+  return bounds.x_min < bounds.x_max && bounds.y_min < bounds.y_max ? bounds : null;
+}
+
 /** Map normalized bounds onto the actual image content, including contain letterboxing or cover cropping. */
 export function projectBounds(
   bounds: Bounds,

@@ -23,6 +23,8 @@ import type { Area, Resource } from '@/lib/types';
 import { categoryLabels } from '@/lib/types';
 import { errorMessage, quantityLabel } from '@/lib/format';
 import { createClientId } from '@/lib/client-id';
+import { pickupAreaRecipients } from '@/lib/share-defaults';
+import { validItemBounds } from '@/lib/images/geometry';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import {
   getResource,
@@ -45,6 +47,7 @@ import { useApp } from './app-provider';
 import { EmptyState, Loading, Notice, PageHeading } from './ui';
 import { ListingEditor } from './listing-editor';
 import { ResourceCard } from './resource-card';
+import { LocalizedPhoto } from './localized-photo';
 
 type Stage = 'photo' | 'items' | 'details' | 'preview' | 'published';
 
@@ -64,6 +67,11 @@ export function ShareView() {
     error: reviewError,
   } = useScanReview();
   const [drafts, setDrafts] = useState<Resource[]>([]);
+  const draftsRef = useRef<Resource[]>([]);
+  const replaceDrafts = useCallback((rows: Resource[]) => {
+    draftsRef.current = rows;
+    setDrafts(rows);
+  }, []);
   const [areas, setAreas] = useState<Area[]>([]);
   const [images, setImages] = useState<Record<string, string | null>>({});
   const [active, setActive] = useState(0);
@@ -92,9 +100,25 @@ export function ShareView() {
     currentSave.current = save;
   }, []);
   const onSaved = useCallback(
-    (saved: Resource) =>
-      setDrafts((previous) => previous.map((item) => (item.id === saved.id ? saved : item))),
-    [],
+    async (saved: Resource) => {
+      const remember = (row: Resource) =>
+        replaceDrafts(draftsRef.current.map((item) => (item.id === row.id ? row : item)));
+      remember(saved);
+      if (draftsRef.current[0]?.id !== saved.id) return;
+      // Empty areas are untouched defaults. Once saved, each item keeps its own
+      // choice across reloads, including choices made before the first item.
+      for (const item of pickupAreaRecipients(draftsRef.current, saved)) {
+        if (!mounted.current) throw new Error('This editor is no longer active.');
+        const updated = await saveResource(
+          createBrowserSupabaseClient(),
+          { ...editableFields(item), area_id: saved.area_id },
+          item.id,
+          item.revision,
+        );
+        if (mounted.current) remember(updated);
+      }
+    },
+    [replaceDrafts],
   );
   const draftParam = params.get('draft') || '';
   const scanParam = params.get('scan') || '';
@@ -141,7 +165,7 @@ export function ShareView() {
             ),
           );
           if (mounted) {
-            setDrafts(rows);
+            replaceDrafts(rows);
             setImages(urls);
             setStage('details');
           }
@@ -164,7 +188,7 @@ export function ShareView() {
     return () => {
       mounted = false;
     };
-  }, [userId, draftParam, scanParam, restoreReview]);
+  }, [userId, draftParam, scanParam, restoreReview, replaceDrafts]);
   useEffect(
     () => () => {
       if (filePreview) URL.revokeObjectURL(filePreview);
@@ -262,13 +286,15 @@ export function ShareView() {
               label: '',
               category: 'other' as const,
               visible_observations: [] as string[],
+              bounds: null,
               candidate_id: (manualDraftKey.current ||= `manual:${createClientId()}`),
             },
           ]
         : reviewed.filter((item) => item.selected);
       if (!selection.length) throw new Error('Select at least one item or add one yourself.');
-      const image = await createListingImage(ready.scanId);
       const saved: Resource[] = [];
+      const client = createBrowserSupabaseClient();
+      let fullImage: Awaited<ReturnType<typeof createListingImage>> | undefined;
       // Separate durable drafts; only the later Publish command changes public visibility.
       for (const candidate of selection) {
         const existing = drafts.find(
@@ -278,7 +304,11 @@ export function ShareView() {
           saved.push(existing);
           continue;
         }
-        const row = await saveResource(createBrowserSupabaseClient(), {
+        const bounds = validItemBounds(candidate.bounds);
+        const image = bounds
+          ? await createListingImage(ready.scanId, bounds)
+          : (fullImage ||= await createListingImage(ready.scanId));
+        const row = await saveResource(client, {
           title: candidate.label,
           category: candidate.category,
           description: candidate.visible_observations.join(' '),
@@ -307,7 +337,7 @@ export function ShareView() {
       );
       if (!mounted.current) return;
       if (manual) manualDraftKey.current = null;
-      setDrafts(saved);
+      replaceDrafts(saved);
       setImages(imageUrls);
       setActive(0);
       setStage('details');
@@ -321,17 +351,21 @@ export function ShareView() {
     }
   }
   async function switchDraft(index: number) {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     try {
       await currentSave.current?.();
       setActive(index);
       setError('');
     } catch (failure) {
       setError(errorMessage(failure));
+    } finally {
+      actionInFlight.current = false;
     }
   }
   function reviewAll(saved: Resource) {
-    const latest = drafts.map((item) => (item.id === saved.id ? saved : item));
-    setDrafts(latest);
+    const latest = draftsRef.current.map((item) => (item.id === saved.id ? saved : item));
+    replaceDrafts(latest);
     if (saved.status === 'available') {
       setStage('published');
       setError('');
@@ -432,7 +466,7 @@ export function ShareView() {
               analysisKey.current = null;
               uploadKey.current = null;
               setConsent(false);
-              setDrafts([]);
+              replaceDrafts([]);
               publishKey.current = null;
             }}
           >
@@ -666,31 +700,52 @@ export function ShareView() {
         <>
           <div className="share-layout">
             <div>
-              <div className="review-image">
-                <img src={scan.imageUrl} alt="Your materials with numbered review boxes" />
-                {candidates.map(
-                  (candidate, index) =>
-                    candidate.bounds && (
-                      <button
-                        key={candidate.candidate_id}
-                        className={`image-box ${active === index ? 'active' : ''}`}
-                        style={{
-                          left: `${candidate.bounds.x_min / 10}%`,
-                          top: `${candidate.bounds.y_min / 10}%`,
-                          width: `${(candidate.bounds.x_max - candidate.bounds.x_min) / 10}%`,
-                          height: `${(candidate.bounds.y_max - candidate.bounds.y_min) / 10}%`,
-                        }}
-                        aria-label={`Review item ${index + 1}: ${candidate.label}`}
-                        onClick={() => {
-                          setActive(index);
-                          document.getElementById(`candidate-${index}`)?.focus();
-                        }}
-                      >
-                        <span>{index + 1}</span>
-                      </button>
-                    ),
-                )}
-              </div>
+              {candidates[active] && (
+                <>
+                  <LocalizedPhoto
+                    src={scan.imageUrl}
+                    alt={`Item ${active + 1}: ${candidates[active].label || 'Unnamed item'}`}
+                    bounds={candidates[active].bounds}
+                    width={scan.width}
+                    height={scan.height}
+                  />
+                  <p className="photo-caption">
+                    Item {active + 1}: {candidates[active].label || 'Unnamed item'}
+                    {validItemBounds(candidates[active].bounds)
+                      ? ' · Suggested crop'
+                      : ' · Full photo'}
+                  </p>
+                </>
+              )}
+              <details>
+                <summary className="text-link">See full photo and all items</summary>
+                <div className="review-image">
+                  <img src={scan.imageUrl} alt="Your materials with numbered review boxes" />
+                  {candidates.map(
+                    (candidate, index) =>
+                      validItemBounds(candidate.bounds) &&
+                      candidate.bounds && (
+                        <button
+                          key={candidate.candidate_id}
+                          className={`image-box ${active === index ? 'active' : ''}`}
+                          style={{
+                            left: `${candidate.bounds.x_min / 10}%`,
+                            top: `${candidate.bounds.y_min / 10}%`,
+                            width: `${(candidate.bounds.x_max - candidate.bounds.x_min) / 10}%`,
+                            height: `${(candidate.bounds.y_max - candidate.bounds.y_min) / 10}%`,
+                          }}
+                          aria-label={`Review item ${index + 1}: ${candidate.label}`}
+                          onClick={() => {
+                            setActive(index);
+                            document.getElementById(`candidate-${index}`)?.focus();
+                          }}
+                        >
+                          <span>{index + 1}</span>
+                        </button>
+                      ),
+                  )}
+                </div>
+              </details>
               <p className="photo-caption">
                 <Info size={12} />
                 Suggested identities, not verified material or condition.
@@ -881,6 +936,13 @@ export function ShareView() {
             onSaved={onSaved}
             onReview={reviewAll}
             registerSave={registerSave}
+            batchAreaHint={
+              drafts.length > 1 && drafts[active].status === 'draft'
+                ? active === 0
+                  ? 'Used for items that don’t have a pickup area yet. You can change each item separately.'
+                  : 'Starts with the first item’s pickup area. Change it here if this item is elsewhere.'
+                : undefined
+            }
           />
         </>
       )}

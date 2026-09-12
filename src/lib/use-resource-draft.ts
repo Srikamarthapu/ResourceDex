@@ -28,7 +28,7 @@ export function editableFields(resource: Resource): ResourceSaveInput {
 /** One save at a time; later edits never inherit an old revision or a false Saved label. */
 export function useResourceDraft(
   initial: Resource,
-  onSaved: (resource: Resource) => void,
+  onSaved: (resource: Resource) => void | Promise<void>,
   options: { autoSave?: boolean } = {},
 ) {
   const autoSave = options.autoSave ?? true;
@@ -38,6 +38,7 @@ export function useResourceDraft(
   const latest = useRef(value);
   const stored = useRef(JSON.stringify(value));
   const resource = useRef(initial);
+  const pendingNotification = useRef<Resource | null>(null);
   const queue = useRef(createSaveQueue());
   const mounted = useRef(true);
   useEffect(() => {
@@ -77,8 +78,17 @@ export function useResourceDraft(
           }
           // Drain changes made while a write was in flight before allowing a caller
           // to leave the editor or open publication review.
-          while (JSON.stringify(latest.current) !== stored.current) {
+          if (!pendingNotification.current && JSON.stringify(latest.current) === stored.current)
+            pendingNotification.current = resource.current;
+          while (pendingNotification.current || JSON.stringify(latest.current) !== stored.current) {
             if (!mounted.current) throw new Error('This editor is no longer active.');
+            // A batch default may take several writes. Await it before switching
+            // items, and retry an interrupted callback without resaving this row.
+            if (pendingNotification.current) {
+              await onSavedRef.current(pendingNotification.current);
+              pendingNotification.current = null;
+              continue;
+            }
             const snapshot = latest.current;
             const serialized = JSON.stringify(snapshot);
             setStatus('saving');
@@ -91,7 +101,7 @@ export function useResourceDraft(
             );
             resource.current = saved;
             stored.current = serialized;
-            if (mounted.current) onSavedRef.current(saved);
+            pendingNotification.current = saved;
           }
           if (!mounted.current) throw new Error('This editor is no longer active.');
           setStatus('saved');
@@ -115,7 +125,8 @@ export function useResourceDraft(
     return () => clearTimeout(timer);
   }, [value, status, save, autoSave]);
   useEffect(() => {
-    const unsaved = () => JSON.stringify(latest.current) !== stored.current;
+    const unsaved = () =>
+      Boolean(pendingNotification.current) || JSON.stringify(latest.current) !== stored.current;
     const onUnload = (event: BeforeUnloadEvent) => {
       if (unsaved()) {
         event.preventDefault();

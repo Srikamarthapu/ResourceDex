@@ -6,7 +6,8 @@ import type { Area, Category, Resource } from '@/lib/types';
 import { categories, categoryLabels, conditionLabels } from '@/lib/types';
 import { useResourceDraft } from '@/lib/use-resource-draft';
 import { validatePublication } from '@/lib/resource-validation';
-import { createListingImage } from '@/lib/scan-client';
+import { createListingImage, getScan } from '@/lib/scan-client';
+import { validItemBounds } from '@/lib/images/geometry';
 import { errorMessage } from '@/lib/format';
 import { ResourceCard } from './resource-card';
 import { Notice } from './ui';
@@ -19,14 +20,16 @@ export function ListingEditor({
   onSaved,
   onReview,
   registerSave,
+  batchAreaHint,
 }: {
   resource: Resource;
   areas: Area[];
   imageUrl: string | null;
   onImage: (url: string) => void;
-  onSaved: (resource: Resource) => void;
+  onSaved: (resource: Resource) => void | Promise<void>;
   onReview: (resource: Resource) => void;
   registerSave: (save: () => Promise<Resource>) => void;
+  batchAreaHint?: string;
 }) {
   const { value, change, status, error, save } = useResourceDraft(resource, onSaved, {
     autoSave: resource.status !== 'available',
@@ -92,6 +95,35 @@ export function ListingEditor({
       change({ image_path: image.imagePath });
       onImage(image.imageUrl);
       if (reset) setCrop({ x: 0, y: 0, width: 100, height: 100 });
+    } catch (failure) {
+      setLocalError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function applyDetectedCrop() {
+    if (!resource.scan_id || !resource.candidate_id) return;
+    setBusy(true);
+    setLocalError('');
+    try {
+      const scan = await getScan(resource.scan_id);
+      const bounds = validItemBounds(
+        scan.candidates.find((candidate) => candidate.candidate_id === resource.candidate_id)
+          ?.bounds,
+      );
+      if (!bounds)
+        throw new Error(
+          'This item has no saved detection box. Adjust the crop manually or use the full photo.',
+        );
+      const image = await createListingImage(resource.scan_id, bounds);
+      change({ image_path: image.imagePath });
+      onImage(image.imageUrl);
+      setCrop({
+        x: bounds.x_min / 10,
+        y: bounds.y_min / 10,
+        width: (bounds.x_max - bounds.x_min) / 10,
+        height: (bounds.y_max - bounds.y_min) / 10,
+      });
     } catch (failure) {
       setLocalError(errorMessage(failure));
     } finally {
@@ -328,6 +360,7 @@ export function ListingEditor({
               ))}
             </select>
             {fieldError('area_id')}
+            {batchAreaHint && <span className="field-hint">{batchAreaHint}</span>}
             <span className="field-hint">
               A broad area is all you need. Meeting details are shared privately after you accept a
               request.
@@ -393,6 +426,16 @@ export function ListingEditor({
                 ))}
               </div>
               <div className="share-buttons">
+                {resource.candidate_id && !resource.candidate_id.startsWith('manual:') && (
+                  <button
+                    type="button"
+                    className="button small"
+                    disabled={busy}
+                    onClick={applyDetectedCrop}
+                  >
+                    Use detected item crop
+                  </button>
+                )}
                 <button
                   type="button"
                   className="button small"
