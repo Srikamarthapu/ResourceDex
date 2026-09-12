@@ -1,7 +1,7 @@
 import 'server-only';
 import { GoogleGenAI } from '@google/genai';
 import { detectionJsonSchema, detectionPrompt, parseDetections } from './detection';
-import { AnalysisError } from './analysis-error';
+import { AnalysisError, throwIfAnalysisCancelled } from './analysis-error';
 export { AnalysisError } from './analysis-error';
 
 export const DETECTION_DEADLINE_MS = 30_000;
@@ -18,7 +18,8 @@ export function getGeminiConfig() {
   return { apiKey, model };
 }
 
-export async function identifyItems(bytes: Buffer, runId: string) {
+export async function identifyItems(bytes: Buffer, runId: string, signal?: AbortSignal) {
+  throwIfAnalysisCancelled(signal);
   const { apiKey, model } = getGeminiConfig();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DETECTION_DEADLINE_MS);
@@ -45,13 +46,14 @@ export async function identifyItems(bytes: Buffer, runId: string) {
         responseJsonSchema: detectionJsonSchema,
         temperature: 0.2,
         maxOutputTokens: 6000,
-        abortSignal: controller.signal,
+        abortSignal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
         httpOptions: {
           timeout: DETECTION_DEADLINE_MS,
           retryOptions: { attempts: 1 },
         },
       },
     });
+    throwIfAnalysisCancelled(signal);
     if (controller.signal.aborted)
       throw new AnalysisError(
         'timeout',
@@ -76,6 +78,7 @@ export async function identifyItems(bytes: Buffer, runId: string) {
       );
     }
   } catch (error) {
+    throwIfAnalysisCancelled(signal);
     if (error instanceof AnalysisError) throw error;
     if (controller.signal.aborted)
       throw new AnalysisError(

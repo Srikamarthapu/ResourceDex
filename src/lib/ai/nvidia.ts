@@ -1,7 +1,7 @@
 import 'server-only';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { AnalysisError } from './analysis-error';
+import { AnalysisError, throwIfAnalysisCancelled } from './analysis-error';
 import { detectionJsonSchema, detectionPrompt, parseDetections } from './detection';
 
 const apiOrigin = 'https://integrate.api.nvidia.com';
@@ -48,10 +48,16 @@ export function jsonAnswer(text: string): string {
 export async function generateNvidiaJson(
   prompt: string,
   jsonSchema: unknown,
-  { image, timeoutMs = NVIDIA_VISION_DEADLINE_MS }: { image?: Buffer; timeoutMs?: number } = {},
+  {
+    image,
+    timeoutMs = NVIDIA_VISION_DEADLINE_MS,
+    signal,
+  }: { image?: Buffer; timeoutMs?: number; signal?: AbortSignal } = {},
 ) {
+  throwIfAnalysisCancelled(signal);
   const { apiKey, model } = getNvidiaConfig();
   const controller = new AbortController();
+  const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
   const headers = {
     Authorization: `Bearer ${apiKey}`,
@@ -62,7 +68,7 @@ export async function generateNvidiaJson(
     let response = await fetch(`${apiOrigin}/v1/chat/completions`, {
       method: 'POST',
       headers,
-      signal: controller.signal,
+      signal: requestSignal,
       body: JSON.stringify({
         model,
         stream: false,
@@ -94,6 +100,7 @@ export async function generateNvidiaJson(
     // never resubmit an inference or follow a provider-supplied arbitrary URL.
     let requestId: string | null = null;
     while (response.status === 202) {
+      throwIfAnalysisCancelled(signal);
       const pending = await response.json().catch(() => ({}));
       requestId ||= response.headers.get('nvcf-reqid') || pending.requestId;
       if (!z.string().uuid().safeParse(requestId).success)
@@ -101,10 +108,10 @@ export async function generateNvidiaJson(
           'provider_unavailable',
           'The backup identifier could not finish. Try again.',
         );
-      await delay(1000, undefined, { signal: controller.signal });
+      await delay(1000, undefined, { signal: requestSignal });
       response = await fetch(`${apiOrigin}/v1/status/${requestId}`, {
         headers,
-        signal: controller.signal,
+        signal: requestSignal,
       });
     }
     if (!response.ok) {
@@ -116,6 +123,12 @@ export async function generateNvidiaJson(
       throw failure;
     }
     const raw = await response.text();
+    throwIfAnalysisCancelled(signal);
+    if (controller.signal.aborted)
+      throw new AnalysisError(
+        'timeout',
+        'The backup identifier took too long. Retry or add items yourself.',
+      );
     if (Buffer.byteLength(raw) > 500_000)
       throw new AnalysisError(
         'invalid_output',
@@ -146,6 +159,7 @@ export async function generateNvidiaJson(
       tokenUsage: parsed.data.usage ?? {},
     };
   } catch (error) {
+    throwIfAnalysisCancelled(signal);
     if (error instanceof AnalysisError) throw error;
     if (controller.signal.aborted)
       throw new AnalysisError(
@@ -161,10 +175,16 @@ export async function generateNvidiaJson(
   }
 }
 
-export async function identifyItemsWithNvidia(bytes: Buffer, runId: string, timeoutMs?: number) {
+export async function identifyItemsWithNvidia(
+  bytes: Buffer,
+  runId: string,
+  timeoutMs?: number,
+  signal?: AbortSignal,
+) {
   const result = await generateNvidiaJson(detectionPrompt, detectionJsonSchema, {
     image: bytes,
     timeoutMs,
+    signal,
   });
   try {
     return {

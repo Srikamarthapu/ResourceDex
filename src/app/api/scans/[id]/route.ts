@@ -5,6 +5,7 @@ import {
   scanJson,
   verifiedScanContext,
 } from '@/lib/ai/scan-server';
+import { ANALYSIS_TIMEOUT_MESSAGE, failAnalysis } from '@/lib/ai/analysis-lifecycle';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,28 +13,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     let scan = await ownedScan((await params).id, context);
     if (
       scan.status === 'analyzing' &&
+      scan.analysis_operation_key &&
       scan.analysis_deadline_at &&
       Date.parse(scan.analysis_deadline_at) <= Date.now()
     ) {
-      await context.admin
-        .from('scans')
-        .update({
-          status: 'failed',
-          analysis_error: 'Identification took too long. Retry or add the items yourself.',
-        })
-        .eq('id', scan.id)
-        .eq('status', 'analyzing')
-        .eq('analysis_operation_key', scan.analysis_operation_key);
-      await context.admin
-        .from('analysis_attempts')
-        .update({
-          status: 'failed',
-          error_code: 'timeout',
-          finished_at: new Date().toISOString(),
-        })
-        .eq('scan_id', scan.id)
-        .eq('operation_key', scan.analysis_operation_key)
-        .eq('status', 'running');
+      await failAnalysis(context.admin, {
+        ownerId: context.user.id,
+        scanId: scan.id,
+        operationKey: scan.analysis_operation_key,
+        code: 'timeout',
+        message: ANALYSIS_TIMEOUT_MESSAGE,
+        expiredOnly: true,
+      });
       scan = await ownedScan(scan.id, context);
     }
     return scanJson(await safeScanResponse(scan, context.admin));

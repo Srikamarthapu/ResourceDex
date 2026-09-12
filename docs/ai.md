@@ -9,7 +9,7 @@ The pipeline uses Supabase private Storage, Google Gemini for primary identifica
 - `NVIDIA_API_KEY`: server-only NVIDIA NIM API key.
 - `NVIDIA_MODEL`: exact value `moonshotai/kimi-k3`. Other identifiers are rejected; earlier Kimi models are not silently substituted.
 - `AI_SCAN_MAX_COST_USD`: conservative allowance for the complete possible primary vision, backup vision, and reference attempt. Account for both providers' current pricing and output limits.
-- `AI_DAILY_BUDGET_USD`: maximum reserved allowances in a UTC day. Failed/timed-out calls count because a timeout does not guarantee billing stops.
+- `AI_DAILY_BUDGET_USD`: maximum reserved allowances in a UTC day. Failed, timed-out, and stopped calls count because ending a request does not guarantee provider billing stops.
 - Supabase public URL/publishable key and server secret: see the environment template and [backend runbook](backend.md).
 
 `reserve_analysis` serializes budget checks in Postgres and enforces 10 attempts per owner per hour and 30 per UTC day. A partial unique index permits one running scan per owner. One reservation covers the bounded attempt; actual provider usage and fallback/retrieval metadata are recorded separately from that allowance.
@@ -24,11 +24,25 @@ The backup runs after a Google 429, network failure, 5xx, timeout, or missing Go
 2. Upload bytes directly with Supabase `uploadToSignedUrl`; never proxy the allowed 10 MB photo through a Next.js request body.
 3. `POST /api/scans/:id/prepare` validates JPEG/PNG/WebP bytes, rejects images above 10 MB or 40 megapixels and animated inputs, rotates EXIF orientation, strips metadata, and produces a JPEG up to 2,048 pixels on its longest edge without enlargement. The raw upload is removed; only normalized previews are signed.
 4. Disclose Google image processing and NVIDIA backup processing before analysis. Send `{imageHash,operationKey,consent:true,providerConsent:"google-nvidia-v1"}` to `POST /api/scans/:id/analyze`. Legacy requests without `providerConsent` remain Google-only. Replaying a key restores its saved outcome; a deliberate new attempt uses a new UUID. Analysis never publishes anything.
-5. `GET /api/scans/:id` restores safe status, candidates, analysis/review versions, and a fresh five-minute image preview. Expired work becomes failed. It does not promise processing survives closing the browser. Stored reference notes are rechecked against current sources before returning them.
+5. `GET /api/scans/:id` restores safe status, candidates, analysis/review versions, and a fresh five-minute image preview. The response includes the owned operation key, start time, and deadline. Expired work and its matching attempt become failed atomically. The browser polls while processing or reconnecting; a reload recovers persisted results or resumes status checks. Closing a tab does not explicitly cancel a run, although the hosting runtime may still interrupt it. Stored reference notes are rechecked against current sources before returning them.
 6. `POST /api/scans/:id/review` accepts `{analysisVersion,expectedReviewVersion,candidates:[{candidateId,label,category,selected}]}`. Send the complete visible list, up to twelve entries. Omitted originals are retained as removed private entries. Corrections persist without replacing pixel evidence; changed names/categories clear reference notes. Manual IDs use `manual:<UUID>` and receive no invented observations or bounds. Stale analysis/review versions return HTTP 409. Earlier snapshots remain private after reruns.
 7. `POST /api/scans/:id/image` with `{operationKey,crop?}` creates a private approved derivative. Named crop coordinates use `x_min,y_min,x_max,y_max` on a 0–1000 scale. Valid detected items get separate crops; missing bounds and manual items retain the full photo. Owners can adjust/reset crops before publication.
 
 Routes verify Auth/email and scan ownership before privileged access, reject cross-origin browser mutations, validate request shapes, and return private/no-store responses. No caller-supplied owner ID is trusted. Signed URLs are short-lived capabilities; do not log or persist them in public data.
+
+## Stopping and recovering identification
+
+`POST /api/scans/:id/cancel` accepts only `{operationKey}` after authenticated ownership and origin checks. Its service-only database command locks the scan before the attempt, changes only the matching active operation, and returns fresh status plus `cancelled`. Completion, cancellation, and reservation use the same scan lock order. A late cancellation cannot stop a newer operation; a late provider result cannot complete a stopped one. Photos, earlier candidates, reviews, and admission cost history remain intact.
+
+The Share screen enables Stop after the server confirms the operation is running. Check status and automatic polling resolve slow or interrupted responses without issuing another inference. If a different photo is occupying the owner's single active slot, a 409 includes only that owner's active operation metadata. The current photo stays selected while the owner stops the earlier run or opens its completed review.
+
+The worker checks its durable operation every 2.5 seconds and aborts Gemini, NVIDIA inference/status polling, and reference generation when stopped or replaced. This ends this app's processing and rejects late output; it cannot promise an upstream provider stops already scheduled computation. Cancellation is terminal and never triggers backup inference. Database status checks are bounded, and all polling is disposed when the worker finishes. Lease expiry remains the recovery path if a hosting instance disappears.
+
+Offline regression covers provider cancellation, late responses, reference-pass cancellation, monitor cleanup, and browser attempt state. The September 12 cancellation update passed the production build, lint, TypeScript, the disposable-account lifecycle test, and the desktop/320px browser recovery test. Route regressions also cover delayed duplicates, cancellation before reservation, and replay during a newer operation. No provider requests were required for these deterministic failure tests. The opt-in database test uses disposable accounts and no AI calls:
+
+```sh
+RUN_LIVE_ANALYSIS_LIFECYCLE_TESTS=1 npm test -- tests/analysis-lifecycle-live.test.ts
+```
 
 ## Perception and reference boundaries
 

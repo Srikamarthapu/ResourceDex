@@ -33,22 +33,18 @@ import {
   publishResources,
   saveResource,
 } from '@/lib/data/resources';
-import {
-  analyzeScan,
-  createListingImage,
-  getScan,
-  uploadPhoto,
-  type ScanPreview,
-} from '@/lib/scan-client';
+import { createListingImage, getScan, uploadPhoto, type ScanPreview } from '@/lib/scan-client';
 import { validatePublication } from '@/lib/resource-validation';
 import { editableFields } from '@/lib/use-resource-draft';
 import { useScanReview } from '@/lib/use-scan-review';
+import { useScanAnalysis } from '@/lib/use-scan-analysis';
 import { useApp } from './app-provider';
 import { EmptyState, Loading, Notice, PageHeading } from './ui';
 import { ListingEditor } from './listing-editor';
 import { ResourceCard } from './resource-card';
 import { LocalizedPhoto } from './localized-photo';
 import { ReferenceNotes } from './reference-notes';
+import { AnalysisProgress } from './analysis-progress';
 
 type Stage = 'photo' | 'items' | 'details' | 'preview' | 'published';
 
@@ -67,6 +63,16 @@ export function ShareView() {
     status: reviewStatus,
     error: reviewError,
   } = useScanReview();
+  const onAnalysisSettled = useCallback(
+    (result: ScanPreview) => {
+      setScan(result);
+      restoreReview(result);
+      setStage(result.status === 'completed' ? 'items' : 'photo');
+    },
+    [restoreReview],
+  );
+  const analysis = useScanAnalysis(onAnalysisSettled);
+  const restoreAnalysis = analysis.restore;
   const [drafts, setDrafts] = useState<Resource[]>([]);
   const draftsRef = useRef<Resource[]>([]);
   const replaceDrafts = useCallback((rows: Resource[]) => {
@@ -92,7 +98,6 @@ export function ShareView() {
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const uploadKey = useRef<string | null>(null);
-  const analysisKey = useRef<string | null>(null);
   const manualDraftKey = useRef<string | null>(null);
   const publishKey = useRef<string | null>(null);
   const currentSave = useRef<(() => Promise<Resource>) | null>(null);
@@ -175,7 +180,14 @@ export function ShareView() {
           if (mounted) {
             setScan(existing);
             restoreReview(existing);
-            setStage(existing.candidates.length ? 'items' : 'photo');
+            restoreAnalysis(existing);
+            setStage(
+              existing.status === 'analyzing'
+                ? 'photo'
+                : existing.candidates.length
+                  ? 'items'
+                  : 'photo',
+            );
           }
         }
         if (mounted) loadedKey.current = key;
@@ -189,7 +201,7 @@ export function ShareView() {
     return () => {
       mounted = false;
     };
-  }, [userId, draftParam, scanParam, restoreReview, replaceDrafts]);
+  }, [userId, draftParam, scanParam, restoreReview, restoreAnalysis, replaceDrafts]);
   useEffect(
     () => () => {
       if (filePreview) URL.revokeObjectURL(filePreview);
@@ -197,7 +209,7 @@ export function ShareView() {
     [filePreview],
   );
   function chooseFile(chosen?: File) {
-    if (!chosen || actionInFlight.current) return;
+    if (!chosen || actionInFlight.current || analysis.isActive()) return;
     setError('');
     if (
       !['image/jpeg', 'image/png', 'image/webp'].includes(chosen.type) ||
@@ -214,7 +226,7 @@ export function ShareView() {
       setScan(null);
       restoreReview(null);
       uploadKey.current = operationKey;
-      analysisKey.current = null;
+      analysis.reset();
       manualDraftKey.current = null;
       setConsent(false);
     } catch (failure) {
@@ -235,7 +247,7 @@ export function ShareView() {
     return uploaded;
   }
   async function identify() {
-    if (actionInFlight.current) return;
+    if (actionInFlight.current || analysis.isActive()) return;
     if (!consent) {
       setError(
         'Confirm that this photo may be sent to Google or the NVIDIA backup for identification.',
@@ -256,26 +268,17 @@ export function ShareView() {
           )
         )
           return;
-        analysisKey.current = createClientId();
       }
-      setBusy('Identifying items');
-      analysisKey.current ||= createClientId();
-      const result = await analyzeScan(ready, analysisKey.current);
-      if (!mounted.current) return;
-      const complete = { ...ready, ...result };
-      setScan(complete);
-      restoreReview(complete);
-      setStage('items');
+      analysis.start(ready, createClientId());
     } catch (failure) {
       if (mounted.current) setError(errorMessage(failure));
-      analysisKey.current = null;
     } finally {
       actionInFlight.current = false;
       if (mounted.current) setBusy('');
     }
   }
   async function startDrafts(manual = false) {
-    if (actionInFlight.current) return;
+    if (actionInFlight.current || analysis.isActive()) return;
     actionInFlight.current = true;
     setError('');
     setBusy('Saving private drafts');
@@ -466,7 +469,7 @@ export function ShareView() {
               setScan(null);
               restoreReview(null);
               manualDraftKey.current = null;
-              analysisKey.current = null;
+              analysis.reset();
               uploadKey.current = null;
               setConsent(false);
               replaceDrafts([]);
@@ -514,6 +517,12 @@ export function ShareView() {
           <Notice error>{error}</Notice>
         </div>
       )}
+      <AnalysisProgress
+        state={analysis}
+        elapsedSeconds={analysis.elapsedSeconds}
+        onStop={() => void analysis.stop()}
+        onCheck={() => void analysis.check()}
+      />
       {stage === 'photo' && (
         <div className="share-layout">
           <section>
@@ -542,7 +551,7 @@ export function ShareView() {
                 />
                 <div className="image-toolbar">
                   <button
-                    disabled={Boolean(busy)}
+                    disabled={Boolean(busy) || Boolean(analysis.active)}
                     className="button small"
                     onClick={() => fileInput.current?.click()}
                   >
@@ -550,7 +559,7 @@ export function ShareView() {
                     Replace photo
                   </button>
                   <button
-                    disabled={Boolean(busy)}
+                    disabled={Boolean(busy) || Boolean(analysis.active)}
                     className="button small"
                     onClick={() => {
                       setFile(null);
@@ -558,7 +567,7 @@ export function ShareView() {
                       setScan(null);
                       restoreReview(null);
                       manualDraftKey.current = null;
-                      analysisKey.current = null;
+                      analysis.reset();
                       uploadKey.current = null;
                       setConsent(false);
                       history.replaceState(null, '', '/share');
@@ -593,7 +602,7 @@ export function ShareView() {
               <button
                 className="button"
                 onClick={() => cameraInput.current?.click()}
-                disabled={Boolean(busy)}
+                disabled={Boolean(busy) || Boolean(analysis.active)}
               >
                 <Camera size={15} />
                 Use camera
@@ -610,30 +619,43 @@ export function ShareView() {
                 <input
                   type="checkbox"
                   checked={consent}
+                  disabled={Boolean(analysis.active)}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
                 Send this photo to Google Gemini, or Kimi K3 on NVIDIA if Gemini is unavailable, to
                 help identify items. I’ll review and correct every suggestion.
               </label>
-              <p className="field-hint">Backup identification may take a minute or more.</p>
+              <p className="field-hint">
+                Backup identification can take up to about 3 minutes. You can stop it and add
+                details yourself.
+              </p>
             </div>
             <div className="share-buttons">
               <button
                 className="button primary"
-                disabled={Boolean(busy) || (!file && !scan) || !consent}
+                disabled={Boolean(busy) || Boolean(analysis.active) || (!file && !scan) || !consent}
                 onClick={identify}
               >
                 <ScanLine size={16} />
-                {busy || 'Identify items'}
+                {busy || (analysis.active ? 'Identification in progress' : 'Identify items')}
               </button>
               <button
                 className="button"
-                disabled={Boolean(busy) || (!file && !scan)}
+                disabled={Boolean(busy) || Boolean(analysis.active) || (!file && !scan)}
                 onClick={() => startDrafts(true)}
               >
                 <PencilLine size={15} />
                 Add details myself
               </button>
+              {!analysis.active && candidates.length > 0 && (
+                <button
+                  className="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => setStage('items')}
+                >
+                  Continue saved review
+                </button>
+              )}
             </div>
             <p className="share-disclosure">
               Only approved listing photos and fields become public when you publish. Photos stay

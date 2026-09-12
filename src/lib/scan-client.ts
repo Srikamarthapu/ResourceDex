@@ -15,24 +15,68 @@ export interface ScanPreview {
   limitReached: boolean;
   analysisModel?: string | null;
   referenceStatus?: 'grounded' | 'no_evidence' | 'unavailable' | null;
+  analysisOperationKey?: string | null;
+  analysisStartedAt?: string | null;
+  analysisDeadlineAt?: string | null;
   error?: string;
 }
 
-async function scanRequest<T>(url: string, body?: unknown): Promise<T> {
-  const response = await fetch(
-    url,
-    body === undefined
-      ? { cache: 'no-store' }
-      : {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        },
-  );
-  const result = await response.json();
-  if (!response.ok)
-    throw new Error(result.error || 'This step could not finish. Please try again.');
-  return result as T;
+export interface ActiveAnalysis {
+  scanId: string;
+  operationKey: string;
+  startedAt: string | null;
+  deadlineAt: string | null;
+}
+
+export class ScanRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly activeAnalysis?: ActiveAnalysis,
+  ) {
+    super(message);
+    this.name = 'ScanRequestError';
+  }
+}
+
+async function scanRequest<T>(
+  url: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  timeoutMs = 20_000,
+): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(abort, timeoutMs);
+  try {
+    const response = await fetch(
+      url,
+      body === undefined
+        ? { cache: 'no-store', signal: controller.signal }
+        : {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          },
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok)
+      throw new ScanRequestError(
+        result.error || 'This step could not finish. Please try again.',
+        response.status,
+        result.code,
+        result.activeAnalysis,
+      );
+    // An accepted attempt is still running, even if the response is only partial.
+    return (response.status === 202 ? { ...result, status: 'analyzing' } : result) as T;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
 }
 export async function uploadPhoto(
   file: File,
@@ -58,7 +102,8 @@ export async function uploadPhoto(
   onStage('Preparing private photo');
   return scanRequest<ScanPreview>(`/api/scans/${result.scanId}/prepare`, {});
 }
-export const getScan = (id: string) => scanRequest<ScanPreview>(`/api/scans/${id}`);
+export const getScan = (id: string, signal?: AbortSignal) =>
+  scanRequest<ScanPreview>(`/api/scans/${id}`, undefined, signal);
 export const saveScanReview = (
   scan: { scanId: string; analysisVersion: number; reviewVersion: number },
   candidates: (DetectionCandidate & { selected: boolean })[],
@@ -73,13 +118,24 @@ export const saveScanReview = (
       selected: candidate.selected,
     })),
   });
-export const analyzeScan = (scan: ScanPreview, operationKey: string) =>
-  scanRequest<ScanPreview>(`/api/scans/${scan.scanId}/analyze`, {
-    imageHash: scan.imageHash,
-    operationKey,
-    consent: true,
-    providerConsent: 'google-nvidia-v1',
-  });
+export const analyzeScan = (scan: ScanPreview, operationKey: string, signal?: AbortSignal) =>
+  scanRequest<ScanPreview>(
+    `/api/scans/${scan.scanId}/analyze`,
+    {
+      imageHash: scan.imageHash,
+      operationKey,
+      consent: true,
+      providerConsent: 'google-nvidia-v1',
+    },
+    signal,
+    185_000,
+  );
+export const cancelScanAnalysis = (scanId: string, operationKey: string, signal?: AbortSignal) =>
+  scanRequest<ScanPreview & { cancelled: boolean }>(
+    `/api/scans/${scanId}/cancel`,
+    { operationKey },
+    signal,
+  );
 export const createListingImage = (scanId: string, crop?: Bounds) =>
   scanRequest<{ imagePath: string; imageUrl: string }>(`/api/scans/${scanId}/image`, {
     operationKey: createClientId(),

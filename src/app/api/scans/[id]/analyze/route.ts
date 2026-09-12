@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { DETECTION_PROMPT_VERSION, DETECTION_SCHEMA_VERSION } from '@/lib/ai/detection';
 import { AnalysisError } from '@/lib/ai/analysis-error';
 import {
+  ANALYSIS_TIMEOUT_MESSAGE,
+  expireOwnerAnalyses,
+  failAnalysis,
+} from '@/lib/ai/analysis-lifecycle';
+import { runWhileAnalysisActive } from '@/lib/ai/analysis-monitor';
+import {
   getIdentificationConfig,
   identifyPhoto,
   IDENTIFICATION_DEADLINE_MS,
@@ -50,9 +56,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const context = await verifiedScanContext(request);
     const input = await readJson(request, analyzeSchema);
+    await expireOwnerAnalyses(context.admin, context.user.id);
     const scan = await ownedScan((await params).id, context);
     if (!scan.normalized_path || scan.image_hash !== input.imageHash)
       throw new ScanError(409, 'The photo changed. Reload its preview before identifying items.');
+    const normalizedPath = scan.normalized_path;
     // Replays return the persisted outcome, including terminal failure. A retry uses a new key.
     const { data: previous, error: replayError } = await context.admin
       .from('analysis_attempts')
@@ -66,11 +74,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (previous.image_hash && previous.image_hash !== input.imageHash)
         throw new ScanError(409, 'This operation key belongs to a different photo.');
       if (previous.output) {
+        if (scan.analysis_operation_key !== input.operationKey)
+          return scanJson(
+            await safeScanResponse(scan, context.admin),
+            scan.status === 'analyzing' ? 202 : 200,
+          );
         return scanJson(
           await safeScanResponse(
             {
               ...scan,
               status: 'completed',
+              analysis_error: null,
+              limit_reached: previous.output.limitReached,
               candidates: previous.output.candidates,
               analysis_version: previous.output.analysisVersion,
               model: previous.model,
@@ -85,15 +100,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         scan.analysis_deadline_at &&
         Date.parse(scan.analysis_deadline_at) <= Date.now()
       ) {
-        await context.admin
-          .from('analysis_attempts')
-          .update({
-            status: 'failed',
-            error_code: 'timeout',
-            finished_at: new Date().toISOString(),
-          })
-          .eq('id', previous.id)
-          .eq('status', 'running');
+        await failAnalysis(context.admin, {
+          ownerId: context.user.id,
+          scanId: scan.id,
+          operationKey: input.operationKey,
+          code: 'timeout',
+          message: ANALYSIS_TIMEOUT_MESSAGE,
+          expiredOnly: true,
+        });
         throw new ScanError(
           409,
           'That identification expired. Start a new attempt or add items yourself.',
@@ -111,23 +125,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         202,
       );
     }
+    // Stop may win before reservation creates an attempt row. Reusing that key
+    // must not reopen the cancelled operation; deliberate retries use a new key.
+    if (scan.status === 'failed' && scan.analysis_operation_key === input.operationKey)
+      throw new ScanError(
+        409,
+        scan.analysis_error || 'That attempt ended. Start a new attempt or add items yourself.',
+        'stale_analysis',
+      );
     const allowNvidia = input.providerConsent === 'google-nvidia-v1';
     const provider = getIdentificationConfig(allowNvidia);
     const budget = budgetConfiguration();
     const now = new Date();
-    // Release only expired locks. A late provider response is still rejected by its operation key below.
-    const { error: expiryError } = await context.admin
-      .from('scans')
-      .update({
-        status: 'failed',
-        analysis_error: 'Identification took too long. Retry or add the items yourself.',
-      })
-      .eq('owner_id', context.user.id)
-      .eq('status', 'analyzing')
-      .lt('analysis_deadline_at', now.toISOString());
-    if (expiryError)
-      throw new ScanError(503, 'Identification status could not be checked. Try again.');
-    const { data: locked, error: lockError } = await context.admin
+    // Claim exactly the snapshot we inspected. A delayed duplicate must not
+    // reclaim a stopped, completed, or replaced operation.
+    let claim = context.admin
       .from('scans')
       .update({
         status: 'analyzing',
@@ -141,15 +153,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq('id', scan.id)
       .eq('owner_id', context.user.id)
       .neq('status', 'analyzing')
+      .eq('status', scan.status)
+      .eq('analysis_version', scan.analysis_version);
+    claim =
+      scan.analysis_operation_key === null
+        ? claim.is('analysis_operation_key', null)
+        : claim.eq('analysis_operation_key', scan.analysis_operation_key);
+    const { data: locked, error: lockError } = await claim
       .select('id,analysis_version')
       .maybeSingle();
-    if (lockError || !locked)
-      throw new ScanError(
+    if (lockError || !locked) {
+      const { data: active, error: activeError } = await context.admin
+        .from('scans')
+        .select('id,analysis_operation_key,analysis_started_at,analysis_deadline_at')
+        .eq('owner_id', context.user.id)
+        .eq('status', 'analyzing')
+        .maybeSingle();
+      if (activeError || !active?.analysis_operation_key)
+        throw new ScanError(503, 'Identification status changed. Check its status and try again.');
+      return scanJson(
+        {
+          error:
+            active.id === scan.id
+              ? 'This photo is already being identified. You can check its status or stop it.'
+              : 'Another photo is being identified. You can check its status or stop it before trying this photo.',
+          code: 'analysis_running',
+          activeAnalysis: {
+            scanId: active.id,
+            operationKey: active.analysis_operation_key,
+            startedAt: active.analysis_started_at,
+            deadlineAt: active.analysis_deadline_at,
+          },
+        },
         409,
-        'An identification is already running. Wait for it to finish.',
-        'analysis_running',
       );
-    let attemptId: string | null = null;
+    }
     try {
       const { data: reservation, error: reserveError } = await context.admin.rpc(
         'reserve_analysis',
@@ -172,7 +210,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           503,
           'Identification could not start safely. Try again or add items yourself.',
         );
-      attemptId = String(reservation);
+      const attemptId = String(reservation);
       const { error: provenanceError } = await context.admin
         .from('analysis_attempts')
         .update({
@@ -184,18 +222,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .eq('id', attemptId);
       if (provenanceError)
         throw new ScanError(503, 'Identification could not start safely. Try again.');
-      const { data: file, error: downloadError } = await context.admin.storage
-        .from(SCAN_BUCKET)
-        .download(scan.normalized_path);
-      if (downloadError || !file)
-        throw new ScanError(503, 'The saved photo could not be opened. Try again.');
-      const bytes = Buffer.from(await file.arrayBuffer());
-      if (createHash('sha256').update(bytes).digest('hex') !== input.imageHash)
-        throw new ScanError(
-          409,
-          'The stored photo changed. Upload it again before identifying items.',
-        );
-      const result = await identifyPhoto(bytes, attemptId, allowNvidia);
+      const result = await runWhileAnalysisActive(
+        async (signal) => {
+          const { data: active, error } = await context.admin
+            .from('scans')
+            .select('id')
+            .eq('id', scan.id)
+            .eq('owner_id', context.user.id)
+            .eq('status', 'analyzing')
+            .eq('analysis_operation_key', input.operationKey)
+            .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(5_000)]))
+            .maybeSingle();
+          if (error) throw error;
+          return Boolean(active);
+        },
+        async (signal) => {
+          const { data: file, error: downloadError } = await context.admin.storage
+            .from(SCAN_BUCKET)
+            .download(normalizedPath);
+          if (downloadError || !file)
+            throw new ScanError(503, 'The saved photo could not be opened. Try again.');
+          const bytes = Buffer.from(await file.arrayBuffer());
+          if (createHash('sha256').update(bytes).digest('hex') !== input.imageHash)
+            throw new ScanError(
+              409,
+              'The stored photo changed. Upload it again before identifying items.',
+            );
+          return identifyPhoto(bytes, attemptId, allowNvidia, signal);
+        },
+      );
       const durableResult = {
         scanId: scan.id,
         status: 'completed',
@@ -235,22 +290,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         error instanceof AnalysisError || error instanceof ScanError
           ? error.code
           : 'provider_unavailable';
-      await context.admin
-        .from('scans')
-        .update({ status: 'failed', analysis_error: message })
-        .eq('id', scan.id)
-        .eq('status', 'analyzing')
-        .eq('analysis_operation_key', input.operationKey);
-      if (attemptId)
-        await context.admin
-          .from('analysis_attempts')
-          .update({
-            status: 'failed',
-            error_code: code,
-            finished_at: new Date().toISOString(),
-          })
-          .eq('id', attemptId)
-          .neq('status', 'completed');
+      await failAnalysis(context.admin, {
+        ownerId: context.user.id,
+        scanId: scan.id,
+        operationKey: input.operationKey,
+        code,
+        message,
+      });
       throw error;
     }
   } catch (error) {

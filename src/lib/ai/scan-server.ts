@@ -36,6 +36,7 @@ export type ScanRecord = {
   analysis_error: string | null;
   analysis_operation_key: string | null;
   analysis_deadline_at: string | null;
+  analysis_started_at: string | null;
   limit_reached: boolean;
   model: string | null;
   token_usage?: { grounding?: { status?: string } } | null;
@@ -129,6 +130,9 @@ export async function safeScanResponse(
     imageUrl,
     imagePath: scan.normalized_path,
     analysisVersion: scan.analysis_version,
+    analysisOperationKey: scan.analysis_operation_key,
+    analysisStartedAt: scan.analysis_started_at,
+    analysisDeadlineAt: scan.analysis_deadline_at,
     reviewVersion,
     candidates: candidates
       .filter((candidate) => candidate.review_status !== 'removed')

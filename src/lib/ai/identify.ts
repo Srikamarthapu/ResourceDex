@@ -1,5 +1,5 @@
 import 'server-only';
-import { AnalysisError } from './analysis-error';
+import { AnalysisError, throwIfAnalysisCancelled } from './analysis-error';
 import { getGeminiConfig, identifyItems } from './gemini';
 import {
   generateNvidiaJson,
@@ -34,13 +34,21 @@ export function shouldUseBackup(error: unknown): boolean {
   );
 }
 
-export async function identifyPhoto(bytes: Buffer, runId: string, allowNvidia: boolean) {
+export async function identifyPhoto(
+  bytes: Buffer,
+  runId: string,
+  allowNvidia: boolean,
+  signal?: AbortSignal,
+) {
+  throwIfAnalysisCancelled(signal);
   const deadline = Date.now() + IDENTIFICATION_DEADLINE_MS;
   let primaryFailure: AnalysisError;
   try {
-    const result = await identifyItems(bytes, runId);
+    const result = await identifyItems(bytes, runId, signal);
+    throwIfAnalysisCancelled(signal);
     return { ...result, tokenUsage: { provider: 'google', vision: result.tokenUsage } };
   } catch (error) {
+    throwIfAnalysisCancelled(signal);
     // Do not send an image to another provider on an old Google-only consent,
     // a refused/invalid result, or a provider authentication error.
     if (!allowNvidia || !shouldUseBackup(error) || !process.env.NVIDIA_API_KEY) throw error;
@@ -50,12 +58,15 @@ export async function identifyPhoto(bytes: Buffer, runId: string, allowNvidia: b
     bytes,
     runId,
     Math.min(NVIDIA_VISION_DEADLINE_MS, deadline - Date.now()),
+    signal,
   );
+  throwIfAnalysisCancelled(signal);
   const grounding = await groundCandidateReferences(result.candidates, (prompt, schema) => {
     const remaining = Math.min(45_000, deadline - Date.now());
     if (remaining <= 0) throw new AnalysisError('timeout', 'Reference lookup took too long.');
-    return generateNvidiaJson(prompt, schema, { timeoutMs: remaining });
+    return generateNvidiaJson(prompt, schema, { timeoutMs: remaining, signal });
   });
+  throwIfAnalysisCancelled(signal);
   return {
     ...result,
     candidates: grounding.candidates,
