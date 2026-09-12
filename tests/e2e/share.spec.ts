@@ -49,7 +49,7 @@ async function capture(page: Page, info: TestInfo, name: string, fullPage = true
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
-test('manual photo listing saves privately, survives reload, and publishes to another account', async ({
+test('manual sharing and requests work without crypto.randomUUID', async ({
   browser,
   baseURL,
 }, info) => {
@@ -71,6 +71,21 @@ test('manual photo listing saves privately, survives reload, and publishes to an
     baseURL,
     viewport: { width: 1280, height: 900 },
   });
+  const appUrl = new URL(baseURL!);
+  const exactInsecureOrigin = appUrl.protocol === 'http:' && appUrl.hostname === '0.0.0.0';
+  // Older browsers and HTTP LAN origins may expose secure random bytes but no UUID helper.
+  // At the reported 0.0.0.0 origin, verify native behavior without changing crypto.
+  // On localhost/HTTPS, simulate the missing method before every app script and reload.
+  if (!exactInsecureOrigin) {
+    for (const context of [ownerContext, otherContext]) {
+      await context.addInitScript(() => {
+        Object.defineProperty(globalThis.crypto, 'randomUUID', {
+          configurable: true,
+          value: undefined,
+        });
+      });
+    }
+  }
   const owner = await ownerContext.newPage();
   const other = await otherContext.newPage();
   ownerContext.setDefaultTimeout(20_000);
@@ -109,6 +124,20 @@ test('manual photo listing saves privately, survives reload, and publishes to an
       if ([...listingPaths, ...scanPaths].some((path) => !path.startsWith(prefix)))
         throw new Error('Cleanup refused an image outside the isolated scan prefix.');
       if (resourceId) {
+        const { data: listing, error: listingError } = await admin
+          .from('resources')
+          .select('id')
+          .eq('id', resourceId)
+          .eq('scan_id', scanId)
+          .eq('owner_id', fixture.accounts.owner.id)
+          .single();
+        if (listingError || !listing)
+          throw new Error('Cleanup refused: isolated listing owner could not be verified.');
+        const { error: requestError } = await admin
+          .from('requests')
+          .delete()
+          .eq('resource_id', listing.id);
+        if (requestError) throw new Error('Isolated pickup request cleanup failed.');
         const { error } = await admin
           .from('resources')
           .delete()
@@ -155,6 +184,15 @@ test('manual photo listing saves privately, survives reload, and publishes to an
     await signIn(owner, fixture.accounts.owner, '/share');
     await signIn(other, fixture.accounts.requester, '/');
     signedIn = true;
+    for (const page of [owner, other]) {
+      const capabilities = await page.evaluate(() => ({
+        secureContext: globalThis.isSecureContext,
+        uuid: typeof globalThis.crypto.randomUUID,
+        randomBytes: typeof globalThis.crypto.getRandomValues,
+      }));
+      expect(capabilities).toMatchObject({ uuid: 'undefined', randomBytes: 'function' });
+      if (exactInsecureOrigin) expect(capabilities.secureContext).toBe(false);
+    }
     await owner
       .getByLabel('Choose a resource photo', { exact: true })
       .setInputFiles('public/images/samples/containers.webp');
@@ -251,6 +289,28 @@ test('manual photo listing saves privately, survives reload, and publishes to an
     ).toBeLessThanOrEqual(1);
     await capture(other, info, 'share-second-account-detail-320');
     await capture(other, info, 'share-second-account-detail-320-viewport', false);
+    await other.setViewportSize({ width: 1280, height: 900 });
+    await other.getByRole('button', { name: 'Request pickup', exact: true }).click();
+    await other
+      .getByLabel('A note for the owner', { exact: false })
+      .fill('Automated browser compatibility check. No real pickup is planned.');
+    await other
+      .getByLabel('When could you pick it up?', { exact: true })
+      .fill('A simulated test window only.');
+    await other.getByRole('button', { name: 'Send pickup request', exact: true }).click();
+    await expect(other.getByText('Request sent.', { exact: false })).toBeVisible();
+    const { data: requests, error: requestError } = await admin
+      .from('requests')
+      .select('status,requester_id')
+      .eq('resource_id', resourceId);
+    expect(requestError).toBeNull();
+    expect(requests).toEqual([{ status: 'pending', requester_id: fixture.accounts.requester.id }]);
+    await owner.goto('/requests');
+    const incoming = owner.locator('article.request-card').filter({
+      has: owner.getByRole('heading', { name: title, exact: true }),
+    });
+    await expect(incoming.locator('.request-state')).toHaveText('Pending');
+    await capture(owner, info, 'uuid-fallback-incoming-request');
     expect(runtimeErrors).toEqual([]);
   } catch (error) {
     if (signedIn) {

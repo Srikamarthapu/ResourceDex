@@ -22,6 +22,7 @@ import {
 import type { Area, Resource } from '@/lib/types';
 import { categoryLabels } from '@/lib/types';
 import { errorMessage, quantityLabel } from '@/lib/format';
+import { createClientId } from '@/lib/client-id';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import {
   getResource,
@@ -180,19 +181,25 @@ export function ShareView() {
       setError('Choose a JPEG, PNG, or WebP photo up to 10 MB. Convert HEIC photos first.');
       return;
     }
-    setFile(chosen);
-    setFilePreview(URL.createObjectURL(chosen));
-    setScan(null);
-    restoreReview(null);
-    uploadKey.current = crypto.randomUUID();
-    analysisKey.current = null;
-    manualDraftKey.current = null;
-    setConsent(false);
+    try {
+      const operationKey = createClientId();
+      const preview = URL.createObjectURL(chosen);
+      setFile(chosen);
+      setFilePreview(preview);
+      setScan(null);
+      restoreReview(null);
+      uploadKey.current = operationKey;
+      analysisKey.current = null;
+      manualDraftKey.current = null;
+      setConsent(false);
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
   }
   async function ensurePhoto(): Promise<ScanPreview> {
     if (scan) return scan;
     if (!file) throw new Error('Choose a photo first.');
-    uploadKey.current ||= crypto.randomUUID();
+    uploadKey.current ||= createClientId();
     const uploaded = await uploadPhoto(file, uploadKey.current, setBusy);
     if (!mounted.current)
       throw new Error('Account changed. Your private photo remains in the original account.');
@@ -222,10 +229,10 @@ export function ShareView() {
           )
         )
           return;
-        analysisKey.current = crypto.randomUUID();
+        analysisKey.current = createClientId();
       }
       setBusy('Identifying items');
-      analysisKey.current ||= crypto.randomUUID();
+      analysisKey.current ||= createClientId();
       const result = await analyzeScan(ready, analysisKey.current);
       if (!mounted.current) return;
       const complete = { ...ready, ...result };
@@ -255,7 +262,7 @@ export function ShareView() {
               label: '',
               category: 'other' as const,
               visible_observations: [] as string[],
-              candidate_id: (manualDraftKey.current ||= `manual:${crypto.randomUUID()}`),
+              candidate_id: (manualDraftKey.current ||= `manual:${createClientId()}`),
             },
           ]
         : reviewed.filter((item) => item.selected);
@@ -350,8 +357,8 @@ export function ShareView() {
     actionInFlight.current = true;
     setBusy('Publishing resources');
     setError('');
-    publishKey.current ||= crypto.randomUUID();
     try {
+      publishKey.current ||= createClientId();
       await publishResources(
         createBrowserSupabaseClient(),
         drafts.map((item) => item.id),
@@ -785,7 +792,7 @@ export function ShareView() {
                   setCandidates((previous) => [
                     ...previous,
                     {
-                      candidate_id: `manual:${crypto.randomUUID()}`,
+                      candidate_id: `manual:${createClientId()}`,
                       label: '',
                       category: 'other',
                       bounds: null,

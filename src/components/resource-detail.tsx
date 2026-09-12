@@ -23,6 +23,7 @@ import { useLiveQuery } from '@/lib/use-live-query';
 import { categoryLabels, conditionLabels, type ResourceRequest } from '@/lib/types';
 import { sampleAreas, sampleResources } from '@/lib/sample-resources';
 import { errorMessage, quantityLabel } from '@/lib/format';
+import { createClientId } from '@/lib/client-id';
 
 export function ResourceDetail({ id }: { id: string }) {
   const { user, configured } = useApp();
@@ -97,8 +98,8 @@ export function ResourceDetail({ id }: { id: string }) {
     setBusy(true);
     setError('');
     const form = new FormData(event.currentTarget);
-    requestKey.current ||= crypto.randomUUID();
     try {
+      requestKey.current ||= createClientId();
       await createRequest(
         createBrowserSupabaseClient(),
         id,

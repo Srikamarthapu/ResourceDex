@@ -1,3 +1,4 @@
+import { createClientId } from './client-id';
 import { createBrowserSupabaseClient } from './supabase/browser';
 import type { DetectionCandidate, Bounds } from './ai/detection';
 
@@ -78,6 +79,6 @@ export const analyzeScan = (scan: ScanPreview, operationKey: string) =>
   });
 export const createListingImage = (scanId: string, crop?: Bounds) =>
   scanRequest<{ imagePath: string; imageUrl: string }>(`/api/scans/${scanId}/image`, {
-    operationKey: crypto.randomUUID(),
+    operationKey: createClientId(),
     ...(crop ? { crop } : {}),
   });
