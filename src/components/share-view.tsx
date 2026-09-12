@@ -48,6 +48,7 @@ import { EmptyState, Loading, Notice, PageHeading } from './ui';
 import { ListingEditor } from './listing-editor';
 import { ResourceCard } from './resource-card';
 import { LocalizedPhoto } from './localized-photo';
+import { ReferenceNotes } from './reference-notes';
 
 type Stage = 'photo' | 'items' | 'details' | 'preview' | 'published';
 
@@ -236,7 +237,9 @@ export function ShareView() {
   async function identify() {
     if (actionInFlight.current) return;
     if (!consent) {
-      setError('Confirm that this photo may be sent to Google for identification.');
+      setError(
+        'Confirm that this photo may be sent to Google or the NVIDIA backup for identification.',
+      );
       return;
     }
     actionInFlight.current = true;
@@ -609,9 +612,10 @@ export function ShareView() {
                   checked={consent}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
-                Send this photo to Google Gemini to help identify items. I’ll review and correct
-                every suggestion.
+                Send this photo to Google Gemini, or Kimi K3 on NVIDIA if Gemini is unavailable, to
+                help identify items. I’ll review and correct every suggestion.
               </label>
+              <p className="field-hint">Backup identification may take a minute or more.</p>
             </div>
             <div className="share-buttons">
               <button
@@ -698,6 +702,22 @@ export function ShareView() {
       )}
       {stage === 'items' && scan && (
         <>
+          {scan.analysisModel?.startsWith('moonshotai/') && (
+            <Notice>
+              Kimi K3 identified these items because Gemini was unavailable. Review each suggestion
+              before continuing.
+            </Notice>
+          )}
+          {scan.referenceStatus === 'unavailable' && (
+            <Notice>
+              Item identification is ready, but the reuse reference lookup could not finish.
+            </Notice>
+          )}
+          {scan.referenceStatus === 'no_evidence' && (
+            <Notice>
+              No matching reuse references were found in the current starter collection.
+            </Notice>
+          )}
           <div className="share-layout">
             <div>
               {candidates[active] && (
@@ -794,7 +814,9 @@ export function ShareView() {
                       onChange={(event) =>
                         setCandidates((previous) =>
                           previous.map((item, position) =>
-                            position === index ? { ...item, label: event.target.value } : item,
+                            position === index
+                              ? { ...item, label: event.target.value, reference_notes: undefined }
+                              : item,
                           ),
                         )
                       }
@@ -810,7 +832,11 @@ export function ShareView() {
                         setCandidates((previous) =>
                           previous.map((item, position) =>
                             position === index
-                              ? { ...item, category: event.target.value as typeof item.category }
+                              ? {
+                                  ...item,
+                                  category: event.target.value as typeof item.category,
+                                  reference_notes: undefined,
+                                }
                               : item,
                           ),
                         )
@@ -826,6 +852,7 @@ export function ShareView() {
                     {!candidate.bounds && (
                       <p>Location needs review. The full photo can still be used.</p>
                     )}
+                    <ReferenceNotes notes={candidate.reference_notes} />
                   </div>
                   <button
                     className="icon-button"

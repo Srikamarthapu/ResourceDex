@@ -46,16 +46,16 @@ export function applyCandidateReview(
   const reviewed: DetectionCandidate[] = original.map((candidate) => {
     const edit = edited.get(candidate.candidate_id);
     if (!edit) return { ...candidate, selected: false, review_status: 'removed' };
-    return {
+    const identityChanged = edit.label !== candidate.label || edit.category !== candidate.category;
+    const reviewedCandidate: DetectionCandidate = {
       ...candidate,
       label: edit.label,
       category: edit.category,
       selected: edit.selected,
-      review_status:
-        edit.label !== candidate.label || edit.category !== candidate.category
-          ? 'corrected'
-          : 'pending',
+      review_status: identityChanged ? 'corrected' : 'pending',
     };
+    if (identityChanged) delete reviewedCandidate.reference_notes;
+    return reviewedCandidate;
   });
   return reviewed.concat(
     manualEdits.map((candidate) => ({

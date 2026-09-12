@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DETECTION_PROMPT_VERSION, DETECTION_SCHEMA_VERSION } from '@/lib/ai/detection';
+import { AnalysisError } from '@/lib/ai/analysis-error';
 import {
-  AnalysisError,
-  DETECTION_DEADLINE_MS,
-  getGeminiConfig,
-  identifyItems,
-} from '@/lib/ai/gemini';
+  getIdentificationConfig,
+  identifyPhoto,
+  IDENTIFICATION_DEADLINE_MS,
+} from '@/lib/ai/identify';
 import {
   operationKeySchema,
   ownedScan,
@@ -20,13 +20,14 @@ import {
 } from '@/lib/ai/scan-server';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 const analyzeSchema = z
   .object({
     operationKey: operationKeySchema,
     imageHash: z.string().regex(/^[a-f0-9]{64}$/),
     consent: z.literal(true),
+    providerConsent: z.literal('google-nvidia-v1').optional(),
   })
   .strict();
 
@@ -55,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Replays return the persisted outcome, including terminal failure. A retry uses a new key.
     const { data: previous, error: replayError } = await context.admin
       .from('analysis_attempts')
-      .select('id,status,output,image_hash,error_code')
+      .select('id,status,output,image_hash,error_code,model,token_usage')
       .eq('scan_id', scan.id)
       .eq('owner_id', context.user.id)
       .eq('operation_key', input.operationKey)
@@ -72,6 +73,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               status: 'completed',
               candidates: previous.output.candidates,
               analysis_version: previous.output.analysisVersion,
+              model: previous.model,
+              token_usage: previous.token_usage,
             },
             context.admin,
           ),
@@ -108,7 +111,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         202,
       );
     }
-    getGeminiConfig();
+    const allowNvidia = input.providerConsent === 'google-nvidia-v1';
+    const provider = getIdentificationConfig(allowNvidia);
     const budget = budgetConfiguration();
     const now = new Date();
     // Release only expired locks. A late provider response is still rejected by its operation key below.
@@ -129,7 +133,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: 'analyzing',
         analysis_operation_key: input.operationKey,
         analysis_started_at: now.toISOString(),
-        analysis_deadline_at: new Date(now.getTime() + DETECTION_DEADLINE_MS + 5_000).toISOString(),
+        analysis_deadline_at: new Date(
+          now.getTime() + IDENTIFICATION_DEADLINE_MS + 5_000,
+        ).toISOString(),
         analysis_error: null,
       })
       .eq('id', scan.id)
@@ -171,7 +177,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .from('analysis_attempts')
         .update({
           image_hash: input.imageHash,
-          model: getGeminiConfig().model,
+          model: provider.model,
           prompt_version: DETECTION_PROMPT_VERSION,
           schema_version: DETECTION_SCHEMA_VERSION,
         })
@@ -189,7 +195,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           409,
           'The stored photo changed. Upload it again before identifying items.',
         );
-      const result = await identifyItems(bytes, attemptId);
+      const result = await identifyPhoto(bytes, attemptId, allowNvidia);
       const durableResult = {
         scanId: scan.id,
         status: 'completed',

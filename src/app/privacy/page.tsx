@@ -22,9 +22,12 @@ export default function PrivacyPage() {
       <h2>Optional photo assistance</h2>
       <p>
         Only after you choose “Identify items” and consent, the normalized photo is sent to Google
-        Gemini. Suggestions can be wrong and require your review. You can choose manual entry
-        without an AI request. The server removes image metadata and normalizes orientation before
-        analysis.
+        Gemini. If Gemini is rate-limited or temporarily unavailable, the photo can be sent to Kimi
+        K3 through NVIDIA NIM. The backup also matches provisional item descriptions to a small
+        reviewed collection of reuse references. These notes do not verify the item’s material,
+        condition, or safety and stay out of public listings. Suggestions can be wrong and require
+        your review. You can choose manual entry without an AI request. The server removes image
+        metadata and normalizes orientation before analysis.
       </p>
       <h2>Pickup details and photo links</h2>
       <p>

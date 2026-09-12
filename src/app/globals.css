@@ -1593,6 +1593,31 @@ main:focus {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 28px 22px;
 }
+.draft-manage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 24px;
+}
+.reference-notes {
+  margin-top: 12px;
+}
+.reference-notes article {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.reference-notes a {
+  display: inline-flex;
+  white-space: normal;
+}
+.draft-manage-bar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 .resource-manage-actions {
   display: flex;
   gap: 6px;

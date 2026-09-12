@@ -16,7 +16,7 @@ The local CLI binds its services to all interfaces by default. Use only test dat
 - `src/lib/supabase/browser.ts`: browser cookie client and configuration check.
 - `src/lib/supabase/server.ts`: per-request cookie client and separately named server administrative client.
 - `src/lib/supabase/proxy.ts`: verified session refresh and private/no-store cache headers.
-- `src/lib/data/resources.ts`: typed listing reads, full draft save, atomic publish, withdraw, area/profile reads and 5-minute image signing.
+- `src/lib/data/resources.ts`: typed listing reads, draft save/deletion, atomic publish, withdraw, area/profile reads and 5-minute image signing.
 - `src/lib/data/requests.ts`: participant-only request reads, atomic transitions, private pickup proposals and revision-aware agreement.
 - `public.scan_reviews`: private owner corrections keyed by scan and analysis version; service-only compare-and-set writes retain earlier snapshots.
 - `supabase/migrations/`: repeatable schema, grants, policies and commands. Files were initially created with `supabase migration new`; filenames match the versions assigned when the same SQL was applied to the selected hosted project.
@@ -35,10 +35,13 @@ The profile trigger copies only a bounded display name from user metadata. Autho
 
 Privileged command implementations live in the unexposed `private` schema, use an empty fixed `search_path`, and verify the actor before writing. Thin public RPCs use security invoker and individual execution grants. Service-only AI reservation/completion RPCs have execution explicitly revoked from ordinary roles.
 
+Private `reference_notes` may accompany a Kimi analysis candidate. They use vetted source IDs/hashes and remain outside public `resources` descriptions; read-time filtering checks current source validity. Provider fallback/retrieval metadata and actual token usage are recorded with analysis attempts. The consented pipeline has a 165-second overall deadline and 170-second persisted lease; see [AI configuration](ai.md).
+
 ## Supported transitions
 
 - Save a new draft or edit an owned draft, withdrawn or available resource. Edits require the revision the caller saw. An available-content edit increments the revision and cancels pending requests with “Listing updated; request again.” Reserved and completed content cannot be edited.
 - Publish 1–20 reviewed drafts/withdrawn records atomically. Validation requires complete listing facts, an active area, positive quantity or named lot, working declaration for tools, alt text, and a ready owner-owned listing derivative that exists in Storage. A persisted operation key prevents duplicate publication; the command also requires the exact listing revisions shown in the public preview.
+- Delete one or all selected owned, never-published drafts through `delete_resource_drafts`. Migration `20260912212852_delete_saved_drafts.sql` locks and rechecks ownership/status before removal; missing rows are safe retries. A private candidate tombstone prevents stale autosave/retry from recreating the deleted item. Shared scans and photos remain available to other drafts/listings and are removed through account cleanup.
 - Withdraw a resource, canceling all pending/accepted requests in the same transaction.
 - Request an available whole listing, rejecting self-requests and duplicate active requests. Retry with the same operation key returns the original request.
 - Accept exactly one request under a resource-row lock; decline other pending requests. Lock order is resource, request, then pickup throughout the workflow.
@@ -47,7 +50,7 @@ Privileged command implementations live in the unexposed `private` schema, use a
 - Record collection as owner, atomically completing the listing and fulfilling the accepted request.
 - Submit a report. An operator assigned through trusted database administration can hide/restore a resource; hiding closes affected requests. There is no user-editable operator role.
 
-Draft saves are serialized through their local revision commits and check the active account. Review/save waits for edits made while earlier writes are in flight. Public-content editing uses explicit reviewed saves, while private drafts may autosave. Two deterministic save-queue tests cover competing autosave/review callers and recovery after failure.
+Draft saves are serialized through their local revision commits and check the active account. Review/save waits for edits made while earlier writes are in flight. Public-content editing uses explicit reviewed saves, while private drafts may autosave. Save-queue tests cover competing autosave/review callers and recovery after failure. First-item pickup defaults persist to blank same-photo drafts without overwriting individual choices. Draft deletion uses row/candidate locks against concurrent publication and stale saves; `tests/e2e/draft-deletion.spec.ts` covers the UI workflow.
 
 ## Local verification
 
@@ -83,14 +86,14 @@ This prepares six labeled examples using the licensed photos documented in `docs
 
 The same integration suite passed all 42 checks against both local Supabase and the hosted ResourceDex project on September 12, 2026. It covers unauthorized draft/scan/attempt/image access, blocked direct state writes and foreign image attachment, live cross-account publication, idempotent commands, concurrent acceptance, stale pickup agreement, cancellation revocation, content-edit revision invalidation, stale publication previews and owner pickup edits, indexed material search, explicit unknown normalization, completion history and image access, and service-only AI budget/completion commands, versioned review persistence, stale review conflicts, reanalysis retention and owner isolation.
 
-The final hosted schema review has five informational `rls_enabled_no_policy` notices for intentionally deny-by-default server-only tables (`private.account_deletions`, `private.audit_events`, `private.command_results`, `private.operator_users`, `public.analysis_attempts`). Do not add broad policies merely to remove these notices. See the [Supabase advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy). The final advisor refresh also reports an Auth warning: leaked-password protection is disabled. Enable it before an external pilot if the selected plan supports it; [Supabase currently requires Pro or above](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No plan was upgraded.
+The latest hosted schema review has six informational `rls_enabled_no_policy` notices for intentionally deny-by-default server-only tables (`private.account_deletions`, `private.deleted_draft_candidates`, `private.audit_events`, `private.command_results`, `private.operator_users`, `public.analysis_attempts`). Do not add broad policies merely to remove these notices. See the [Supabase advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy). The final advisor refresh also reports an Auth warning: leaked-password protection is disabled. Enable it before an external pilot if the selected plan supports it; [Supabase currently requires Pro or above](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No plan was upgraded.
 
 Still required before declaring the complete PRD delivered:
 
 - Hosted visual two-session walkthrough and production email verification/recovery delivery checks.
-- The held-out photo and RAG evaluations, approved source corpus and citation/evidence tables; this foundation does not fabricate guidance or claim RAG support.
+- Held-out photo/RAG evaluations, expanded reviewed corpus, and published claim/revision evidence tables. The implemented four-entry private reference notes use real retrieval and source mapping but do not complete the PRD publication contract; see [reference notes](reference-notes.md).
 - Scheduled retention/orphan cleanup. Read-time expiry is implemented for fulfilled pickup details; physical deletion is not yet scheduled.
-- Owner resource/draft deletion with minimal counterpart history, audited operator-support workflow.
+- Deletion semantics and counterpart history for previously published resources, plus an audited operator-support workflow. Never-published drafts and whole accounts now have self-service deletion.
 - Moderation console and operator report review UI. Server commands exist; operator assignment remains a trusted database administration action.
 - Normalized numeric dimension fields, detailed per-field review/provenance history and a durable scan-candidate relation. This foundation uses owner-entered dimension text and stable scan/candidate references without pretending they are measured observations.
 - Rate limits for ordinary publishing/requests/reports, performance targets at the PRD's seeded load, and operational alerting. AI admission limits use a shared database reservation, but configured provider pricing and evaluation remain separate gates.

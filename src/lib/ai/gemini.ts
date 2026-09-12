@@ -1,19 +1,10 @@
 import 'server-only';
 import { GoogleGenAI } from '@google/genai';
 import { detectionJsonSchema, detectionPrompt, parseDetections } from './detection';
+import { AnalysisError } from './analysis-error';
+export { AnalysisError } from './analysis-error';
 
 export const DETECTION_DEADLINE_MS = 30_000;
-
-export class AnalysisError extends Error {
-  providerStatus?: number;
-  constructor(
-    public readonly code: 'not_configured' | 'timeout' | 'provider_unavailable' | 'invalid_output',
-    message: string,
-  ) {
-    super(message);
-    this.name = 'AnalysisError';
-  }
-}
 
 export function getGeminiConfig() {
   const apiKey = process.env.GEMINI_API_KEY;

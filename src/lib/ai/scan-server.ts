@@ -2,7 +2,8 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminSupabase, createServerSupabase } from '../supabase/server';
-import { AnalysisError } from './gemini';
+import { AnalysisError } from './analysis-error';
+import { currentReferenceNotes } from './reference-retrieval';
 import { ImageValidationError } from '../images/normalize';
 import type { DetectionCandidate } from './detection';
 import { hasValidRequestOrigin } from './request-origin';
@@ -36,6 +37,8 @@ export type ScanRecord = {
   analysis_operation_key: string | null;
   analysis_deadline_at: string | null;
   limit_reached: boolean;
+  model: string | null;
+  token_usage?: { grounding?: { status?: string } } | null;
   upload_metadata: { fileName: string; mimeType: string; size: number };
 };
 
@@ -110,6 +113,13 @@ export async function safeScanResponse(
     if (error) throw new ScanError(503, 'Your private preview could not be loaded. Try again.');
     imageUrl = data.signedUrl;
   }
+  const groundingStatus = scan.token_usage?.grounding?.status;
+  const referenceStatus =
+    groundingStatus === 'grounded' ||
+    groundingStatus === 'no_evidence' ||
+    groundingStatus === 'unavailable'
+      ? groundingStatus
+      : null;
   return {
     scanId: scan.id,
     status: scan.status,
@@ -120,7 +130,14 @@ export async function safeScanResponse(
     imagePath: scan.normalized_path,
     analysisVersion: scan.analysis_version,
     reviewVersion,
-    candidates: candidates.filter((candidate) => candidate.review_status !== 'removed'),
+    candidates: candidates
+      .filter((candidate) => candidate.review_status !== 'removed')
+      .map((candidate) => ({
+        ...candidate,
+        reference_notes: currentReferenceNotes(candidate.reference_notes),
+      })),
+    analysisModel: scan.model,
+    referenceStatus,
     limitReached: scan.limit_reached,
     error: scan.analysis_error,
   };

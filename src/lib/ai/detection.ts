@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { categories } from '../types';
+import type { ReferenceNote } from './reference-types';
 
 export const DETECTION_PROMPT_VERSION = 'resource-detection-v1';
 export const DETECTION_SCHEMA_VERSION = 'resource-detection-v1';
@@ -26,6 +27,7 @@ export type DetectionCandidate = {
   review_status: 'pending' | 'corrected' | 'confirmed' | 'removed';
   selected?: boolean;
   source?: 'image' | 'manual';
+  reference_notes?: ReferenceNote[];
 };
 
 const briefList = z.array(z.string().trim().min(1).max(240)).max(6);

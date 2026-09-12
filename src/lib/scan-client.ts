@@ -13,6 +13,8 @@ export interface ScanPreview {
   reviewVersion: number;
   candidates: DetectionCandidate[];
   limitReached: boolean;
+  analysisModel?: string | null;
+  referenceStatus?: 'grounded' | 'no_evidence' | 'unavailable' | null;
   error?: string;
 }
 
@@ -76,6 +78,7 @@ export const analyzeScan = (scan: ScanPreview, operationKey: string) =>
     imageHash: scan.imageHash,
     operationKey,
     consent: true,
+    providerConsent: 'google-nvidia-v1',
   });
 export const createListingImage = (scanId: string, crop?: Bounds) =>
   scanRequest<{ imagePath: string; imageUrl: string }>(`/api/scans/${scanId}/image`, {

@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useApp } from './app-provider';
 import { ResourceCard } from './resource-card';
 import { EmptyState, Loading, Notice, PageHeading } from './ui';
@@ -14,12 +14,14 @@ import {
 } from '@/lib/data/resources';
 import { useLiveQuery } from '@/lib/use-live-query';
 import { errorMessage } from '@/lib/format';
+import { deleteResourceDrafts } from '@/lib/data/drafts';
 
 export function MyResources() {
   const { user, authLoading } = useApp();
   const [tab, setTab] = useState('all');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState('');
   const load = useCallback(async () => {
     const client = createBrowserSupabaseClient();
     const [resources, areas] = await Promise.all([listMyResources(client), listAreas(client)]);
@@ -34,6 +36,33 @@ export function MyResources() {
     return { resources, areas, images };
   }, []);
   const { data, loading, error: queryError, refresh } = useLiveQuery(load, Boolean(user));
+  const drafts = data?.resources.filter((resource) => resource.status === 'draft') ?? [];
+  async function deleteDrafts(ids: string[]) {
+    if (busy || !ids.length) return;
+    const selection = ids.length === 1 ? 'this saved draft' : `these ${ids.length} saved drafts`;
+    if (
+      !window.confirm(
+        `Delete ${selection}? Their listing details will be permanently removed. Other resources will stay as they are.`,
+      )
+    )
+      return;
+    setBusy(ids.length === 1 ? ids[0] : 'all-drafts');
+    setError('');
+    setMessage('');
+    try {
+      await deleteResourceDrafts(createBrowserSupabaseClient(), ids);
+      setMessage(
+        ids.length === 1
+          ? 'Draft deleted. You can start again with a new photo.'
+          : 'Drafts deleted. You can start again with a new photo.',
+      );
+      refresh();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy('');
+    }
+  }
   async function withdraw(id: string) {
     if (
       !window.confirm(
@@ -43,6 +72,7 @@ export function MyResources() {
       return;
     setBusy(id);
     setError('');
+    setMessage('');
     try {
       await withdrawResource(createBrowserSupabaseClient(), id);
       refresh();
@@ -110,6 +140,20 @@ export function MyResources() {
             ))}
           </div>
           {(error || queryError) && <Notice error>{error || queryError}</Notice>}
+          {message && <Notice>{message}</Notice>}
+          {!loading && drafts.length > 1 && ['all', 'draft'].includes(tab) && (
+            <div className="draft-manage-bar">
+              <p>Remove unfinished drafts when you want to start fresh.</p>
+              <button
+                className="button small danger"
+                disabled={Boolean(busy)}
+                onClick={() => deleteDrafts(drafts.map((draft) => draft.id))}
+              >
+                <Trash2 size={15} />
+                {busy === 'all-drafts' ? 'Deleting drafts…' : 'Delete all drafts'}
+              </button>
+            </div>
+          )}
           {loading ? (
             <Loading />
           ) : !data?.resources.some((item) => tab === 'all' || item.status === tab) ? (
@@ -160,10 +204,21 @@ export function MyResources() {
                       {['available', 'reserved'].includes(resource.status) && (
                         <button
                           className="button small"
-                          disabled={busy === resource.id}
+                          disabled={Boolean(busy)}
                           onClick={() => withdraw(resource.id)}
                         >
                           Withdraw
+                        </button>
+                      )}
+                      {resource.status === 'draft' && (
+                        <button
+                          className="button small danger"
+                          aria-label={`Delete draft: ${resource.title || 'Untitled resource'}`}
+                          disabled={Boolean(busy)}
+                          onClick={() => deleteDrafts([resource.id])}
+                        >
+                          <Trash2 size={15} />
+                          {busy === resource.id ? 'Deleting…' : 'Delete draft'}
                         </button>
                       )}
                     </div>

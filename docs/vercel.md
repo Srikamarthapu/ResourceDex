@@ -1,6 +1,6 @@
 # Deploy ResourceDex on Vercel
 
-Reviewed against the application and current official documentation on September 12, 2026. This guide prepares a Vercel deployment; no Vercel deployment has been performed. The working demo uses a local Next.js production server with the hosted ResourceDex Supabase project.
+The existing hosted demo is [resourcedex.vercel.app](https://resourcedex.vercel.app), backed by ResourceDex Supabase. This guide covers the updated code. An earlier successful deployment does not establish that new Kimi fallback, reference notes, or draft deletion have been released; verify the production commit after each update.
 
 ## Import and build
 
@@ -34,16 +34,18 @@ Add these in Vercel **Settings → Environment Variables** before building. Star
 | `SUPABASE_SERVICE_ROLE_KEY`            | Server only          | Legacy alternative to `SUPABASE_SECRET_KEY`; configure one, not both                                                             |
 | `GEMINI_API_KEY`                       | Server only          | Google API key authorized for the selected model                                                                                 |
 | `GEMINI_MODEL`                         | Server only          | Explicit image/JSON-capable model ID available to your account; `gemini-3.5-flash` passed the recorded implementation smoke test |
+| `NVIDIA_API_KEY`                       | Server only          | NVIDIA NIM key authorized for the backup model                                                                                   |
+| `NVIDIA_MODEL`                         | Server only          | Exact value `moonshotai/kimi-k3`; earlier models are not substituted                                                             |
 | `AI_SCAN_MAX_COST_USD`                 | Server configuration | Positive conservative maximum allowance for one analysis attempt                                                                 |
 | `AI_DAILY_BUDGET_USD`                  | Server configuration | Positive UTC-day allowance, at least the per-scan allowance                                                                      |
 
 Public variables are intentionally available to browser code. The Supabase secret bypasses RLS and must never use a `NEXT_PUBLIC_` name. Keep secrets out of source, GitHub Actions logs, screenshots, issue text, and shared demo credentials. `.env.local` and `tmp/demo-accounts.json` remain ignored. The API does not need `DATABASE_URL`, a database password, or a Supabase Management API access token at runtime.
 
-Configure both AI allowances using the chosen model's current pricing and the app's image/output limits; they reserve upper bounds, not the actual provider invoice. Failed/timed-out attempts still consume reservations. Missing AI configuration permits manual photo listings and returns an honest identification error. Missing the Supabase server secret prevents preparing photos even for manual listings. See [AI configuration and evidence](ai.md).
+NVIDIA key/model configuration has been added to the selected project's Production and Preview environments; changed code still requires a deployment. Reserve an allowance for the complete possible Google + Kimi vision + reference attempt, using current provider pricing and output limits. Failed/timed-out attempts count. Missing all AI configuration permits manual listings; missing the Supabase server secret prevents preparing photos even for manual entry. See [AI configuration and evidence](ai.md).
 
 ## Supabase project and email setup
 
-The selected hosted project already has the committed migrations and private buckets. Vercel builds do not apply database migrations. If using a different project, deliberately apply the repository migrations there and verify Auth/RLS/Storage before setting its environment values; see [backend setup](backend.md). Do not make `scan-images` or `listing-images` public.
+Vercel builds do not apply database migrations. Verify migration history before deploying database commands, including `20260912212852_delete_saved_drafts.sql` for owner draft deletion. If using a different project, deliberately apply the repository migrations there and verify Auth/RLS/Storage before setting its environment values; see [backend setup](backend.md). Do not make `scan-images` or `listing-images` public.
 
 After choosing the final HTTPS domain, set Supabase **Authentication → URL Configuration → Site URL** to that origin, for example `https://your-resourcedex-domain.example`. Add callback allow-list entries for that exact hostname:
 
@@ -62,7 +64,7 @@ Test signup/confirmation and password recovery on the final domain using the sam
 
 ## Runtime compatibility
 
-The analyze, prepare, and listing-image routes already export `runtime = 'nodejs'` and `maxDuration = 60`. Sharp and Node crypto run on the Node runtime. The Gemini adapter has a 30-second provider deadline; the remaining function time allows storage and persistence work. Keep a function limit of at least 60 seconds and confirm the deployed function configuration. Current Fluid Compute limits permit this duration. A function timeout still does not guarantee cancellation of provider billing. [Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration)
+The analysis route exports `runtime = 'nodejs'` and `maxDuration = 180`; preparation and listing-image routes retain 60 seconds. Keep Fluid Compute enabled and verify the deployed analysis function allows 180 seconds. Current Fluid Compute limits support it. Google has a 30-second deadline, Kimi vision up to 120 seconds, and reference generation up to 45 seconds within one 165-second overall deadline. The lease is 170 seconds, leaving time for persistence before the route limit. A timeout does not guarantee billing stops. [Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration)
 
 The browser uploads the original image directly to a signed private Supabase Storage destination. App route bodies contain small JSON requests; photos and derivatives are read/written through Storage, with URLs returned to the browser. This accommodates the app's 10 MB photo limit without sending those bytes through Vercel's 4.5 MB request/response limit. Keep this transport when extending uploads. [Vercel payload limits](https://vercel.com/docs/functions/limitations)
 
@@ -74,10 +76,11 @@ Application state lives in Supabase, not a function filesystem or in-process job
 2. Browse signed out; sign up with a real email, confirm, sign out/in, recover the password, and verify return-to-task navigation.
 3. Upload an actual JPEG/PNG/WebP, including an image over 4.5 MB but within 10 MB. Prepare it, correct a live identification, reload the saved review, and publish only after the public preview.
 4. Use a separate account to discover/request that resource. Accept it, revise and agree pickup details, and record collection. Check visitor/unrelated-account access and private image access as described in the [demo runbook](demo-runbook.md).
-5. Verify failures for missing/invalid AI configuration and exhausted budget recover to manual entry. Inspect function logs for errors without logging image bytes, signed URLs, tokens, or private pickup details.
+5. Verify consented Google-rate-limit fallback reaches Kimi and private references resolve to real sources. Reference failure must preserve vision. Legacy Google-only consent, authentication errors, and refusals must not trigger NVIDIA. Check the exhausted-budget/manual-entry path.
+6. Using disposable fixtures, delete one/all unpublished drafts and verify published resources survive; verify account deletion separately. Inspect logs without exposing images, signed URLs, tokens, or private pickup details.
 
-Local production browser tests and hosted Supabase integration checks have passed for exercised flows. They do not establish Vercel deployment, email deliverability, or all PRD acceptance gates. Record the final URL and commit with new deployed-browser evidence.
+Local browser and hosted Supabase checks establish only their exercised flows. Record the final URL, production commit, and fresh browser evidence for each release; earlier deployment evidence does not verify new behavior or email delivery.
 
-Before an external pilot, complete email lifecycle verification, scheduled retention and individual resource-deletion operations, an actionable moderation workflow, abuse controls, and the outstanding quality/load/accessibility cases in the [acceptance ledger](acceptance.md). The last hosted advisor review reported leaked-password protection disabled; enable it where the plan supports it and recheck the advisor. Supabase currently offers this protection on Pro and above. [Supabase password security](https://supabase.com/docs/guides/auth/password-security)
+Before an external pilot, complete email lifecycle verification, scheduled retention and deletion semantics for previously published resources, an actionable moderation workflow, abuse controls, and the outstanding quality/load/accessibility cases in the [acceptance ledger](acceptance.md). The last hosted advisor review reported leaked-password protection disabled; enable it where the plan supports it and recheck the advisor. Supabase currently offers this protection on Pro and above. [Supabase password security](https://supabase.com/docs/guides/auth/password-security)
 
-Generated grounded guidance remains disabled. The four-entry File Search capability demonstration is not the PRD's reviewed corpus or claim-evidence workflow. Complete the required corpus and evaluation before claiming the full PRD demo milestone. Keep seeded sample listings visibly labeled; they are simulated resources and must not be represented as real pickups.
+Private starter reference notes are implemented for Kimi fallback. Full published guidance, claim/revision evidence, corpus expansion, and evaluation remain pending; see [reference notes](reference-notes.md). Keep seeded sample listings visibly labeled; they are simulated resources and must not be represented as real pickups.

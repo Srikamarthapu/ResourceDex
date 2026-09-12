@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "candidateCount": 5,
+  "localizedCount": 5,
+  "durationMs": 62527,
+  "tokenUsage": {
+    "prompt_tokens": 1451,
+    "completion_tokens": 982,
+    "total_tokens": 2433
+  }
+}

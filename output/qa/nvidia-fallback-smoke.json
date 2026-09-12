@@ -1,0 +1,43 @@
+{
+  "status": "passed",
+  "durationMs": 53387,
+  "candidateCount": 5,
+  "localizedCount": 5,
+  "tokenUsage": {
+    "provider": "nvidia",
+    "fallback": {
+      "from": "google",
+      "reason": "provider_unavailable",
+      "status": 429
+    },
+    "vision": {
+      "prompt_tokens": 1451,
+      "completion_tokens": 1038,
+      "total_tokens": 2489
+    },
+    "grounding": {
+      "status": "grounded",
+      "corpusVersion": "starter-2026-09-12-v1",
+      "retrievalVersion": "local-reference-v1",
+      "sourceIds": [
+        "habitat-donation-arrangement",
+        "habitat-material-donation"
+      ],
+      "usage": {
+        "prompt_tokens": 1314,
+        "completion_tokens": 303,
+        "total_tokens": 1617
+      }
+    }
+  },
+  "providerCalls": [
+    {
+      "elapsedMs": 36982,
+      "httpStatus": 200
+    },
+    {
+      "elapsedMs": 16382,
+      "httpStatus": 200
+    }
+  ]
+}
