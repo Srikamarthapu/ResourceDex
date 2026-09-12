@@ -1,0 +1,13 @@
+
+> resourcedex@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.11 /Volumes/Seagate /ResourceDex
+
+
+ Test Files  6 passed | 2 skipped (8)
+      Tests  41 passed | 2 skipped (43)
+   Start at  12:58:42
+   Duration  659ms (transform 662ms, setup 0ms, import 1.10s, tests 381ms, environment 1ms)
+

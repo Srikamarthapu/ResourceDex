@@ -1,0 +1,26 @@
+{
+  "testedAt": "2026-09-12T19:50:18.379Z",
+  "appUrl": "http://localhost:3012",
+  "scanId": "c6fbe8d3-2043-4666-af6f-e35e7f77ba82",
+  "analysisVersion": 1,
+  "candidateCount": 5,
+  "imageHash": "709043c1601ca6baf59bb29df67c2acbb946f3cb1de0f7805f784f9e03047cbb",
+  "checks": [
+    "verified owner private signed upload",
+    "actual image normalization",
+    "unrelated scan read denied",
+    "visitor scan read denied",
+    "live Gemini persisted result",
+    "idempotent analysis replay",
+    "owner-approved private derivative",
+    "unrelated derivative read denied",
+    "refresh restores analysis",
+    "versioned owner corrections and selections restored",
+    "manual additions restored without invented visual evidence",
+    "stale review revision rejected",
+    "unrelated review write denied",
+    "analysis replay preserves saved review"
+  ],
+  "cleanup": "The test removes its own private Storage objects and Auth users in finally. No resource is published.",
+  "limitation": "Single licensed sample photo; not a detection accuracy evaluation or public sharing demonstration."
+}

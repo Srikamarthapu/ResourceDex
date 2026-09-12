@@ -1,0 +1,16 @@
+{
+  "testedAt": "2026-09-12T20:01:42.230Z",
+  "appUrl": "http://localhost:3012",
+  "originalCandidateCount": 5,
+  "createdDraftCount": 2,
+  "checks": [
+    "explicit Google consent before real image identification",
+    "owner name and category corrections saved",
+    "deselected and removed suggestions stay excluded after reload",
+    "manual addition survives reload",
+    "only two selected items create private drafts with corrected fields",
+    "no browser runtime errors"
+  ],
+  "cleanup": "Only this scan, its private drafts and image derivatives are removed. Nothing is published.",
+  "limitation": "Single licensed photo UI regression; not a held-out detection accuracy evaluation."
+}

@@ -1,0 +1,169 @@
+{
+  "testedAt": "2026-09-12T18:55:48.199Z",
+  "input": "Licensed sample tools photograph; not user inventory. See docs/photo-credits.md.",
+  "promptVersion": "resource-detection-v1",
+  "schemaVersion": "resource-detection-v1",
+  "durationMs": 6432,
+  "imageHash": "709043c1601ca6baf59bb29df67c2acbb946f3cb1de0f7805f784f9e03047cbb",
+  "candidates": [
+    {
+      "candidate_id": "00601157-56f4-4a53-8fd6-eb58f91f9418:combination_pliers",
+      "label": "combination pliers",
+      "category": "tools",
+      "bounds": {
+        "x_min": 33,
+        "y_min": 348,
+        "x_max": 399,
+        "y_max": 683
+      },
+      "localization_status": "localized",
+      "localization_reason": null,
+      "visible_observations": [
+        "dark metal finish",
+        "textured handles",
+        "pivot joint visible"
+      ],
+      "unknowns": [
+        "exact brand or model",
+        "jaw alignment and sharpness",
+        "presence of rust inside the joint"
+      ],
+      "owner_questions": [
+        "Do the jaws close completely and align properly?",
+        "Is the pivot joint stiff or does it move smoothly?"
+      ],
+      "review_status": "pending"
+    },
+    {
+      "candidate_id": "00601157-56f4-4a53-8fd6-eb58f91f9418:screwdriver",
+      "label": "screwdriver",
+      "category": "tools",
+      "bounds": {
+        "x_min": 192,
+        "y_min": 438,
+        "x_max": 526,
+        "y_max": 735
+      },
+      "localization_status": "localized",
+      "localization_reason": null,
+      "visible_observations": [
+        "dark handle with ribbed grip",
+        "slender metal shaft",
+        "flathead or phillips tip obscured by angle"
+      ],
+      "unknowns": [
+        "tip type and size",
+        "handle material composition",
+        "shaft straightness"
+      ],
+      "owner_questions": [
+        "What type of tip does this screwdriver have (e.g., flathead, Phillips)?",
+        "Is the tip worn or chipped?"
+      ],
+      "review_status": "pending"
+    },
+    {
+      "candidate_id": "00601157-56f4-4a53-8fd6-eb58f91f9418:needle_nose_pliers",
+      "label": "needle-nose pliers",
+      "category": "tools",
+      "bounds": {
+        "x_min": 455,
+        "y_min": 493,
+        "x_max": 632,
+        "y_max": 847
+      },
+      "localization_status": "localized",
+      "localization_reason": null,
+      "visible_observations": [
+        "slender pointed jaws",
+        "curved handles without insulated grips",
+        "metal construction"
+      ],
+      "unknowns": [
+        "exact jaw length",
+        "presence of wire cutter section",
+        "spring-loaded mechanism presence"
+      ],
+      "owner_questions": [
+        "Are these pliers spring-loaded?",
+        "Is there any play or wobble in the pivot joint?"
+      ],
+      "review_status": "pending"
+    },
+    {
+      "candidate_id": "00601157-56f4-4a53-8fd6-eb58f91f9418:ball_peen_hammer",
+      "label": "ball-peen hammer",
+      "category": "tools",
+      "bounds": {
+        "x_min": 410,
+        "y_min": 269,
+        "x_max": 1000,
+        "y_max": 960
+      },
+      "localization_status": "localized",
+      "localization_reason": null,
+      "visible_observations": [
+        "metal hammer head with flat face and rounded peen",
+        "dark wooden or composite handle",
+        "handle extends diagonally to the bottom right"
+      ],
+      "unknowns": [
+        "head weight",
+        "handle material (wood or fiberglass)",
+        "tightness of the head attachment"
+      ],
+      "owner_questions": [
+        "What is the weight of the hammer head?",
+        "Is the head securely attached to the handle without any wobble?"
+      ],
+      "review_status": "pending"
+    },
+    {
+      "candidate_id": "00601157-56f4-4a53-8fd6-eb58f91f9418:wooden_board",
+      "label": "wooden board",
+      "category": "wood",
+      "bounds": {
+        "x_min": 0,
+        "y_min": 273,
+        "x_max": 1000,
+        "y_max": 995
+      },
+      "localization_status": "localized",
+      "localization_reason": null,
+      "visible_observations": [
+        "flat wooden surface with visible grain",
+        "serves as a support platform for the tools"
+      ],
+      "unknowns": [
+        "wood species",
+        "exact dimensions and thickness",
+        "treatment or finish applied"
+      ],
+      "owner_questions": [
+        "What type of wood is this board made from?",
+        "Is the board warped or flat?"
+      ],
+      "review_status": "pending"
+    }
+  ],
+  "limitReached": false,
+  "model": "gemini-3.5-flash",
+  "tokenUsage": {
+    "promptTokenCount": 1370,
+    "candidatesTokenCount": 878,
+    "totalTokenCount": 2641,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 290
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 1080
+      }
+    ],
+    "thoughtsTokenCount": 393,
+    "serviceTier": "standard"
+  },
+  "limitation": "One capability smoke test does not establish detection precision, recall, or IoU release gates."
+}

@@ -1,0 +1,2 @@
+-- Intentionally empty: the migration installs demo pickup areas, not fake users
+-- or active neighbor listings. Use the app with distinct confirmed test accounts.

@@ -1,0 +1,10 @@
+node_modules
+.next
+tmp
+output
+**/._*
+package-lock.json
+PRD.md
+GEMINI_API_KEY.md
+
+next-env.d.ts

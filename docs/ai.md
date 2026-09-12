@@ -1,0 +1,51 @@
+# Photo identification and private images
+
+The image pipeline uses Supabase private Storage and a server-only Gemini adapter. Missing credentials, usage configuration, invalid provider output, refusal, or timeout returns a recoverable error; the app never invents detections. Owners can create manual listings after preparing a photo.
+
+## Configuration
+
+- `GEMINI_API_KEY`: server-only Google API key.
+- `GEMINI_MODEL`: an exact model identifier verified for the configured account with image input and JSON output. There is deliberately no guessed default.
+- `AI_SCAN_MAX_COST_USD`: an operator-selected conservative upper bound per provider call, established from the chosen model's current pricing, input image limits, and the configured 6,000-token output cap.
+- `AI_DAILY_BUDGET_USD`: the maximum sum of reserved call allowances in a UTC day. Reservations count failed and timed-out calls because a client timeout does not guarantee billing stopped.
+- Supabase public URL/publishable key and server secret: see the environment template and database runbook.
+
+`reserve_analysis` serializes budget checks in Postgres. It enforces 10 attempts per owner per hour and 30 per UTC day. A partial unique index permits one running scan per owner. No automatic retry is intentionally requested. Provider calls time out after 30 seconds; a persisted 35-second lease prevents an expired run overwriting a newer result. Actual usage metadata is recorded separately from the conservative allowance. The allowance does not establish actual billed cost; configure provider-side spending protections too before external use.
+
+## Browser contract
+
+1. `POST /api/scans` with `{fileName,mimeType,size,operationKey}`. Use a stable UUID for retries of the same file. The response supplies a private `scanId` and `{bucket,path,token,signedUrl}` upload destination.
+2. Upload the file directly with Supabase `storage.from(bucket).uploadToSignedUrl(path, token, file)`. Never send the 10 MB image through a Next.js request body.
+3. `POST /api/scans/:id/prepare`. This downloads private bytes, decodes and validates JPEG/PNG/WebP, rejects images above 10 MB or 40 megapixels and animated inputs, rotates to EXIF orientation, strips metadata, and produces a JPEG no longer than 2,048 pixels without enlargement. The raw upload is then removed. Only normalized previews are signed.
+4. Before AI analysis, explain the photo is sent to Google. `POST /api/scans/:id/analyze` with `{imageHash,operationKey,consent:true}`. Replaying the key returns the saved outcome. A deliberate new attempt uses a new UUID. Failed AI never publishes anything.
+5. `GET /api/scans/:id` restores safe status, candidate suggestions, `analysisVersion`, `reviewVersion` (initially zero), and a fresh five-minute preview. The server records expired running work as failed. It does not promise work survives closing the browser.
+6. Save owner review with `POST /api/scans/:id/review` and `{analysisVersion,expectedReviewVersion,candidates:[{candidateId,label,category,selected}]}`. Send the complete visible list, up to twelve entries. Omitted original candidates become removed entries in a private snapshot; labels, categories and selections persist without replacing raw provider observations. New owner-added items require a `manual:<UUID>` identifier and receive no invented visual observations or bounding box. The response returns the new `reviewVersion`. A stale analysis or review version returns HTTP 409; reload before attempting another write. Previous analysis snapshots remain private after reruns, including a failed rerun. Replaying a completed analysis operation restores its saved review.
+7. After owner crop review, `POST /api/scans/:id/image` with `{operationKey,crop?}`. Crop coordinates use named `x_min,y_min,x_max,y_max` values from 0–1000. Omitting crop retains the full, reviewed photo. This creates a private `listing-images` derivative and a trusted `image_assets` entry, returning `imagePath` for a resource draft. Creating a derivative does not publish it.
+
+All routes verify the Auth user and email verification, authorize scan ownership before using the privileged client, reject cross-origin browser mutations, validate request shapes, and return private/no-store responses. No caller-supplied owner ID is trusted. Signed URLs are short-lived capabilities; do not log or persist them in public data.
+
+## Model contract
+
+`src/lib/ai/detection.ts` contains the versioned prompt, JSON schema, strict parser, and the one coordinate adapter. Google returns `[y_min,x_min,y_max,x_max]`; canonical storage uses named bounds. Invalid localization is retained as an explicitly unlocalized suggestion, while invalid identity fields, duplicate keys, excess candidates, or malformed JSON reject the run. Twelve candidates triggers an incomplete-result hint. The model does not provide calibrated confidence or safety certification.
+
+`src/lib/images/geometry.ts` maps canonical boxes into `contain` letterboxing or `cover` cropping. Dimensions always refer to the already rotated working image. These helpers also support keyboard-accessible crop controls without requiring dragging.
+
+## Grounded guidance status
+
+A four-entry implementation-reviewed capability corpus is available in `knowledge/starter-corpus.json`. It contains original, conservative paraphrases of EPA and Habitat for Humanity guidance, with canonical links, review dates, attribution, usage basis, and conditions. This is a starter for verifying the integration, not the required pilot reference collection. Runtime generated guidance and publication of claims remain disabled. Manual owner-reviewed publication remains available. Do not add citation badges to owner notes, seed items, generic model ideas, or unverified URLs.
+
+Run `node --experimental-strip-types scripts/ingest-knowledge.ts` to explicitly create and index a new versioned store. The command persists an initially inactive registry, attaches source IDs/content hashes/corpus versions as provider metadata, waits for each document's indexing, and performs a real retrieval smoke check. It marks the capability registry ready only when actual returned source annotations map to the expected active entries and store. The command never publishes generated text to resource records. Its output includes provider store/document identifiers but no credentials or user photos. A run on September 12, 2026 indexed four entries and mapped three retrieved sources successfully; see `output/qa/file-search-smoke.json` and `output/knowledge/registry.json`.
+
+Before enabling runtime RAG, complete PRD section 9: expand and review 20–30 entries, persist approved source metadata and immutable guidance evidence in Supabase, bind each claim to its exact resource/revision, and reject unsupported, withdrawn, or stale results. The 30 reference cases and with/without RAG comparison remain release gates. One successful source mapping shows technical compatibility; it does not establish claim support accuracy or usefulness.
+
+## Verification and external references
+
+Automated tests cover invalid JSON/boxes, duplicate IDs, cap/no-result states, portrait/landscape/mobile/cover geometry, rotation, metadata stripping, unsupported content, byte and pixel limits, provider failure/deadline handling, request origins, and immutable visual evidence during owner review. These tests do not establish detection accuracy. Live account-specific API smoke tests and cross-account Storage tests establish integration behavior. The 20-photo/100-object held-out evaluation remains required before making quality claims.
+
+On September 12, 2026, the actual adapter completed a live vision/JSON smoke test with the account-discovered `gemini-3.5-flash` model and the licensed tools photograph. The provider step took 6.4 seconds and returned five owner-review candidates. The supporting board may be background and a small plier subtype needs review, illustrating why the owner must correct results. Evidence is in `output/qa/gemini-smoke.json`; this is not a precision/recall evaluation. A preceding `gemini-3.8-flash` vision request returned a provider high-demand 503, and the adapter correctly produced the recoverable manual-entry path. The configured model was then deliberately changed; the application has no silent model fallback.
+
+The opt-in commands `RUN_LIVE_AI_TESTS=1 npm test -- tests/ai-live.test.ts` and `RUN_LIVE_PHOTO_API_TESTS=1 PHOTO_TEST_APP_URL=http://localhost:3012 npm test -- tests/ai-api-live.test.ts` make real provider requests. The direct adapter smoke and ingestion script operate outside the app's Postgres cost-reservation flow; run them deliberately. The API test uses temporary verified users, publishes nothing, checks unrelated/visitor access denial, and cleans up its own private uploads and users.
+
+The authenticated API smoke passed on September 12, 2026 in 23.8 seconds. Its fourteen checks include actual signed upload, normalization, real Gemini output, persisted results, approved private derivatives, cross-account access denial, versioned owner corrections and selections, manual additions, revision conflicts, and replay preserving the saved review. See `output/qa/photo-pipeline-smoke.json`. The five offline AI/image suites pass 39 tests. This evidence covers the implemented private photo pipeline; it does not verify the entire product journey or replace the held-out quality evaluation.
+
+API conventions were checked against [Google image understanding](https://ai.google.dev/gemini-api/docs/image-understanding), [Google structured output](https://ai.google.dev/gemini-api/docs/structured-output), [the JavaScript generation configuration](https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateContentConfig.html), [File Search](https://ai.google.dev/gemini-api/docs/file-search), [Supabase signed uploads](https://supabase.com/docs/reference/javascript/storage-from-createsigneduploadurl), and [Sharp output metadata behavior](https://sharp.pixelplumbing.com/api-output/). Re-run the opt-in smoke tests after changing the SDK, provider model, or hosted configuration.

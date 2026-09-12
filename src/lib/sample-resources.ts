@@ -1,0 +1,108 @@
+import type { Area, Resource } from './types';
+
+export const sampleAreas: Area[] = [
+  { id: 'berkeley', label: 'Berkeley', region_label: 'East Bay' },
+  { id: 'oakland', label: 'Oakland', region_label: 'East Bay' },
+  { id: 'albany', label: 'Albany', region_label: 'East Bay' },
+];
+const sampleBase: Resource = {
+  id: '',
+  owner_id: 'sample-owner',
+  title: '',
+  category: 'wood',
+  description: '',
+  quantity: null,
+  unit: 'pieces',
+  lot_label: 'One lot · count unknown',
+  condition: 'unknown',
+  working_status: 'not_applicable',
+  material: 'Unknown',
+  dimensions: '',
+  area_id: 'berkeley',
+  image_path: null,
+  image_alt: '',
+  status: 'available',
+  revision: 1,
+  owner_confirmed_at: null,
+  published_at: '2026-09-12T12:00:00Z',
+  completed_at: null,
+  created_at: '2026-09-12T12:00:00Z',
+  updated_at: '2026-09-12T12:00:00Z',
+  is_sample: true,
+};
+export const sampleResources: Resource[] = [
+  {
+    ...sampleBase,
+    id: 'sample-wood',
+    title: 'Rough-sawn boards',
+    category: 'wood',
+    description:
+      'An example listing for a mixed stack of wooden boards. The type, treatment, dimensions, and usability would need to be confirmed by the owner.',
+    image_path: '/images/samples/wood.webp',
+    image_alt: 'A close view of stacked rough-sawn wooden boards.',
+  },
+  {
+    ...sampleBase,
+    id: 'sample-tools',
+    title: 'Four-piece hand tool set',
+    category: 'tools',
+    quantity: 4,
+    unit: 'tools',
+    lot_label: null,
+    area_id: 'oakland',
+    working_status: 'not_tested',
+    description:
+      'An example collection of a hammer, screwdriver, and two pliers. Working condition has not been tested.',
+    image_path: '/images/samples/tools.webp',
+    image_alt: 'A hammer, screwdriver, and two pairs of pliers.',
+  },
+  {
+    ...sampleBase,
+    id: 'sample-hardware',
+    title: 'Mixed bolts & fittings',
+    category: 'hardware',
+    area_id: 'albany',
+    description:
+      'An example lot of bolts and threaded fittings. Thread sizes, material, and condition have not been confirmed.',
+    image_path: '/images/samples/hardware.webp',
+    image_alt: 'A close view of assorted bolts and threaded fittings.',
+  },
+  {
+    ...sampleBase,
+    id: 'sample-metal',
+    title: 'Metal bar stock',
+    category: 'metal',
+    description:
+      'An example listing for metal stock. Exact alloy, dimensions, and suitability for structural use are unknown.',
+    image_path: '/images/samples/metal.webp',
+    image_alt: 'Lengths of metal bar stock arranged together.',
+  },
+  {
+    ...sampleBase,
+    id: 'sample-containers',
+    title: 'Glass jar with screw lid',
+    category: 'containers',
+    quantity: 1,
+    unit: 'jar',
+    lot_label: null,
+    area_id: 'oakland',
+    description:
+      'An example of a glass storage jar. Capacity and suitability for food storage have not been established.',
+    image_path: '/images/samples/containers.webp',
+    image_alt: 'An empty glass jar with a screw lid.',
+  },
+  {
+    ...sampleBase,
+    id: 'sample-craft',
+    title: 'Mottled yarn ball',
+    category: 'craft',
+    quantity: 1,
+    unit: 'ball',
+    lot_label: null,
+    area_id: 'albany',
+    description:
+      'An example yarn listing. Fiber composition, weight, and remaining length would need owner confirmation.',
+    image_path: '/images/samples/craft.webp',
+    image_alt: 'A ball of mottled yarn.',
+  },
+];

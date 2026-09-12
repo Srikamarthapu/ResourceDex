@@ -1,0 +1,71 @@
+{
+  "version": "starter-2026-09-12-v1",
+  "status": "reviewed_for_capability_test",
+  "limitations": "Four conservative implementation-reviewed entries for a File Search capability test. This is not the required 20–30-entry pilot corpus or a claim of evaluation readiness.",
+  "entries": [
+    {
+      "id": "epa-reuse-hardware",
+      "title": "Reuse of removable hardware",
+      "publisher": "United States Environmental Protection Agency",
+      "url": "https://www.epa.gov/smm/sustainable-management-construction-and-demolition-materials",
+      "locator": "What Materials Can Be Reused?",
+      "publishedAt": null,
+      "sourceUpdatedAt": "2026-03-18",
+      "reviewedAt": "2026-09-12",
+      "reviewedBy": "ResourceDex implementation source review",
+      "usageBasis": "Original concise paraphrase of factual guidance on a United States government page. No source images, branding, or lengthy extracts are ingested.",
+      "categories": ["hardware"],
+      "active": true,
+      "text": "Removable building hardware is among the materials EPA identifies as candidates for salvage, donation, or reuse on another project.",
+      "applicability": "This is general reuse guidance. Whether a particular part fits or performs adequately requires measurements, a condition check, and the receiving project's requirements. It does not establish safety or structural suitability from a photo."
+    },
+    {
+      "id": "epa-packaging-return",
+      "title": "Return reusable packaging to suppliers",
+      "publisher": "United States Environmental Protection Agency",
+      "url": "https://www.epa.gov/smm/sustainable-management-construction-and-demolition-materials",
+      "locator": "What Materials Can Be Reused?",
+      "publishedAt": null,
+      "sourceUpdatedAt": "2026-03-18",
+      "reviewedAt": "2026-09-12",
+      "reviewedBy": "ResourceDex implementation source review",
+      "usageBasis": "Original concise paraphrase of factual guidance on a United States government page. No source images, branding, or lengthy extracts are ingested.",
+      "categories": ["containers", "other"],
+      "active": true,
+      "text": "EPA lists returning packaging materials to suppliers as a reuse option.",
+      "applicability": "Applies only to actual packaging that the relevant supplier agrees to accept. It does not imply every container is returnable, clean, or suitable for food or chemical storage."
+    },
+    {
+      "id": "habitat-material-donation",
+      "title": "Check a local ReStore's material donation options",
+      "publisher": "Habitat for Humanity",
+      "url": "https://www.habitat.org/restores/donate-goods",
+      "locator": "What can you donate to ReStore?",
+      "publishedAt": null,
+      "sourceUpdatedAt": null,
+      "reviewedAt": "2026-09-12",
+      "reviewedBy": "ResourceDex implementation source review",
+      "usageBasis": "Original concise paraphrase of donation facts with attribution and a canonical link; no copyrighted page copy, photographs, or logos are ingested.",
+      "categories": ["wood", "metal", "hardware", "tools", "other"],
+      "active": true,
+      "text": "A local Habitat ReStore may be another donation route for new or gently used building materials. Acceptance varies by location, so contact the store with the actual item details first.",
+      "applicability": "A broad material category does not guarantee acceptance. Confirm the specific item's condition, dimensions, quantity, and the local store's current requirements. ResourceDex is not affiliated with Habitat for Humanity."
+    },
+    {
+      "id": "habitat-donation-arrangement",
+      "title": "Arrange a donation before transporting materials",
+      "publisher": "Habitat for Humanity",
+      "url": "https://www.habitat.org/restores/donate-goods",
+      "locator": "How do you donate items to Habitat ReStore?",
+      "publishedAt": null,
+      "sourceUpdatedAt": null,
+      "reviewedAt": "2026-09-12",
+      "reviewedBy": "ResourceDex implementation source review",
+      "usageBasis": "Original concise paraphrase of donation facts with attribution and a canonical link; no copyrighted page copy, photographs, or logos are ingested.",
+      "categories": ["wood", "metal", "hardware", "tools", "other"],
+      "active": true,
+      "text": "Contact the local ReStore to discuss the items and agree on a donation method. Confirm donation hours before traveling; they can differ from shopping hours.",
+      "applicability": "Applies to donations the local store agrees to accept. Pickup service, hours, and item eligibility must be checked directly; this reference does not arrange a pickup."
+    }
+  ]
+}

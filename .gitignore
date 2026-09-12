@@ -1,0 +1,22 @@
+node_modules
+.next
+.env*
+!.env.example
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.DS_Store
+._*
+tmp/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+.vercel/
+
+GEMINI_API_KEY.md
+
+# Provider store IDs and indexing state are per-environment generated output.
+output/knowledge/
+
+next-env.d.ts

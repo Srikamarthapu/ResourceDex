@@ -1,0 +1,183 @@
+{
+  "testedAt": "2026-09-12T18:50:50.661Z",
+  "model": "gemini-3.8-flash",
+  "store": "fileSearchStores/resourcedex-starter20260912-98lzzv8f699n",
+  "corpusVersion": "starter-2026-09-12-v1",
+  "indexedEntries": 4,
+  "mappedSourceIds": [
+    "epa-reuse-hardware",
+    "habitat-material-donation",
+    "habitat-donation-arrangement"
+  ],
+  "grounding": {
+    "groundingChunks": [
+      {
+        "retrievedContext": {
+          "title": "Reuse of removable hardware",
+          "text": "Source ID: epa-reuse-hardware\nTitle: Reuse of removable hardware\nPublisher: United States Environmental Protection Agency\nCanonical source: https://www.epa.gov/smm/sustainable-management-construction-and-demolition-materials\nSection: What Materials Can Be Reused?\nReference guidance: Removable building hardware is among the materials EPA identifies as candidates for salvage, donation, or reuse on another project.\nConditions and limitations: This is general reuse guidance. Whether a particular part fits or performs adequately requires measurements, a condition check, and the receiving project's requirements. It does not establish safety or structural suitability from a photo.\n\n",
+          "fileSearchStore": "fileSearchStores/resourcedex-starter20260912-98lzzv8f699n",
+          "customMetadata": [
+            {
+              "key": "source_id",
+              "stringValue": "epa-reuse-hardware"
+            },
+            {
+              "key": "source_hash",
+              "stringValue": "78ae6c62b9202aa3250d4649f132f08a1db954ff1b0e0ef57a9d5fddcc2aee82"
+            },
+            {
+              "key": "corpus_version",
+              "stringValue": "starter-2026-09-12-v1"
+            }
+          ]
+        }
+      },
+      {
+        "retrievedContext": {
+          "title": "Check a local ReStore's material donation options",
+          "text": "Source ID: habitat-material-donation\nTitle: Check a local ReStore's material donation options\nPublisher: Habitat for Humanity\nCanonical source: https://www.habitat.org/restores/donate-goods\nSection: What can you donate to ReStore?\nReference guidance: A local Habitat ReStore may be another donation route for new or gently used building materials. Acceptance varies by location, so contact the store with the actual item details first.\nConditions and limitations: A broad material category does not guarantee acceptance. Confirm the specific item's condition, dimensions, quantity, and the local store's current requirements. ResourceDex is not affiliated with Habitat for Humanity.\n\n",
+          "fileSearchStore": "fileSearchStores/resourcedex-starter20260912-98lzzv8f699n",
+          "customMetadata": [
+            {
+              "key": "source_id",
+              "stringValue": "habitat-material-donation"
+            },
+            {
+              "key": "source_hash",
+              "stringValue": "bc3b1505e36a9917ed730a8a3899b147f6c899c862a1b2577df6ec56fe9d35c9"
+            },
+            {
+              "key": "corpus_version",
+              "stringValue": "starter-2026-09-12-v1"
+            }
+          ]
+        }
+      },
+      {
+        "retrievedContext": {
+          "title": "Arrange a donation before transporting materials",
+          "text": "Source ID: habitat-donation-arrangement\nTitle: Arrange a donation before transporting materials\nPublisher: Habitat for Humanity\nCanonical source: https://www.habitat.org/restores/donate-goods\nSection: How do you donate items to Habitat ReStore?\nReference guidance: Contact the local ReStore to discuss the items and agree on a donation method. Confirm donation hours before traveling; they can differ from shopping hours.\nConditions and limitations: Applies to donations the local store agrees to accept. Pickup service, hours, and item eligibility must be checked directly; this reference does not arrange a pickup.\n\n",
+          "fileSearchStore": "fileSearchStores/resourcedex-starter20260912-98lzzv8f699n",
+          "customMetadata": [
+            {
+              "key": "source_id",
+              "stringValue": "habitat-donation-arrangement"
+            },
+            {
+              "key": "source_hash",
+              "stringValue": "c04d8dbf4b40ec5bf180eddcc0667033d0524278bef796748643f28ac71631c5"
+            },
+            {
+              "key": "corpus_version",
+              "stringValue": "starter-2026-09-12-v1"
+            }
+          ]
+        }
+      }
+    ],
+    "groundingSupports": [
+      {
+        "segment": {
+          "startIndex": 137,
+          "endIndex": 342,
+          "text": "### **EPA Guidance on Removable Building Hardware**\n* **Reference Guidance:** Removable building hardware is identified by the EPA as a candidate material for salvage, donation, or reuse on another project"
+        },
+        "groundingChunkIndices": [
+          0
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 344,
+          "endIndex": 425,
+          "text": "* **Conditions and Limitations:** \n  * This serves only as general reuse guidance"
+        },
+        "groundingChunkIndices": [
+          0
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 429,
+          "endIndex": 602,
+          "text": "* Whether a specific part fits or performs adequately requires taking measurements, conducting a condition check, and verifying the receiving project's specific requirements"
+        },
+        "groundingChunkIndices": [
+          0
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 606,
+          "endIndex": 695,
+          "text": "* The guidance does not establish structural suitability or safety (such as from a photo)"
+        },
+        "groundingChunkIndices": [
+          0
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 703,
+          "endIndex": 983,
+          "text": "### **Related Donation Route (Habitat ReStore)**\n* **Reference Guidance:** A local Habitat ReStore may serve as an option for donating new or gently used building materials; however, acceptance varies by location, and donors must contact the specific store with item details first"
+        },
+        "groundingChunkIndices": [
+          1
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 985,
+          "endIndex": 1092,
+          "text": "* **Conditions and Limitations:**\n  * Falling under a broad material category does not guarantee acceptance"
+        },
+        "groundingChunkIndices": [
+          1
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 1096,
+          "endIndex": 1210,
+          "text": "* The donor must confirm the item's condition, dimensions, quantity, and the specific store's current requirements"
+        },
+        "groundingChunkIndices": [
+          1
+        ]
+      },
+      {
+        "segment": {
+          "startIndex": 1214,
+          "endIndex": 1409,
+          "text": "* Donation hours, eligibility, and whether pickup service is offered must be verified directly with the local store prior to transporting materials, as donation hours can differ from retail hours"
+        },
+        "groundingChunkIndices": [
+          2
+        ]
+      }
+    ]
+  },
+  "generatedText": "Based on the supplied collection, the reference guidance and associated conditions regarding donating reusable hardware are as follows:\n\n### **EPA Guidance on Removable Building Hardware**\n* **Reference Guidance:** Removable building hardware is identified by the EPA as a candidate material for salvage, donation, or reuse on another project.\n* **Conditions and Limitations:** \n  * This serves only as general reuse guidance.\n  * Whether a specific part fits or performs adequately requires taking measurements, conducting a condition check, and verifying the receiving project's specific requirements.\n  * The guidance does not establish structural suitability or safety (such as from a photo).\n\n---\n\n### **Related Donation Route (Habitat ReStore)**\n* **Reference Guidance:** A local Habitat ReStore may serve as an option for donating new or gently used building materials; however, acceptance varies by location, and donors must contact the specific store with item details first.\n* **Conditions and Limitations:**\n  * Falling under a broad material category does not guarantee acceptance.\n  * The donor must confirm the item's condition, dimensions, quantity, and the specific store's current requirements.\n  * Donation hours, eligibility, and whether pickup service is offered must be verified directly with the local store prior to transporting materials, as donation hours can differ from retail hours.",
+  "tokenUsage": {
+    "promptTokenCount": 114,
+    "candidatesTokenCount": 321,
+    "totalTokenCount": 2161,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 114
+      }
+    ],
+    "toolUsePromptTokenCount": 1089,
+    "toolUsePromptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1089
+      }
+    ],
+    "thoughtsTokenCount": 637,
+    "serviceTier": "standard"
+  },
+  "limitation": "Capability smoke only. Generated text is not approved listing guidance and is not published to app records."
+}

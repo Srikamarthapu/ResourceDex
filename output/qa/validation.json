@@ -1,0 +1,28 @@
+{
+  "testedAt": "2026-09-12T19:58:57.641724+00:00",
+  "results": [
+    {
+      "check": "typecheck",
+      "exitCode": 0
+    },
+    {
+      "check": "lint",
+      "exitCode": 0
+    },
+    {
+      "check": "unit",
+      "exitCode": 0
+    },
+    {
+      "check": "build",
+      "exitCode": 0
+    }
+  ],
+  "productionBuildId": "dwzo2Wvvd0JMwlRCghV_2",
+  "productionBuildCompletedAt": "2026-09-12T19:59:54.938583+00:00",
+  "sourceSha256": "e162f0b67de9a72402322fec0f7eeee9c1c122e6b30715e6c3909dd225879a7a",
+  "checksWithAdditionalEvidence": {
+    "cleanNpmCi": "Passed in a fresh temporary directory with committed .npmrc, 457 packages audited, zero known vulnerabilities",
+    "privateKeysInBrowserBundle": "No configured private API keys found in .next/static"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "testedAt": "2026-09-12T20:03:18.681Z",
+  "appUrl": "http://localhost:3012",
+  "mode": "production",
+  "buildId": "dwzo2Wvvd0JMwlRCghV_2",
+  "passed": 4,
+  "failed": 0,
+  "durationSeconds": 50.4,
+  "cases": [
+    {
+      "file": "requests.spec.ts",
+      "passed": true,
+      "seconds": 15.2
+    },
+    {
+      "file": "scan-review.spec.ts",
+      "passed": true,
+      "seconds": 16.4
+    },
+    {
+      "file": "share.spec.ts",
+      "passed": true,
+      "seconds": 11.8
+    },
+    {
+      "file": "visual.spec.ts",
+      "passed": true,
+      "seconds": 3.7
+    }
+  ],
+  "cleanup": {
+    "preservedAvailableSeedSamples": 6,
+    "nonSeedOwnerResourcesRemaining": 0
+  },
+  "log": "output/qa/playwright-production.log",
+  "limitations": [
+    "Local production server with hosted Supabase, not a deployed HTTPS web app.",
+    "UI samples and collection actions are simulated; no physical handoff occurred.",
+    "Four browser scenarios do not establish full PRD evaluation, account lifecycle, moderation or retention gates."
+  ]
+}

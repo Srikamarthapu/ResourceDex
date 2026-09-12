@@ -1,0 +1,45 @@
+
+> resourcedex@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.3.5 (webpack)
+- Environments: .env.local
+✓ Running next.config.ts took 58ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.0s
+  Running TypeScript ...
+  Finished TypeScript in 2.4s ...
+  Collecting page data using 9 workers ...
+  Generating static pages using 9 workers (0/11) ...
+  Generating static pages using 9 workers (2/11) 
+  Generating static pages using 9 workers (5/11) 
+  Generating static pages using 9 workers (8/11) 
+✓ Generating static pages using 9 workers (11/11) in 607ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /about
+├ ○ /account
+├ ƒ /api/scans
+├ ƒ /api/scans/[id]
+├ ƒ /api/scans/[id]/analyze
+├ ƒ /api/scans/[id]/image
+├ ƒ /api/scans/[id]/prepare
+├ ƒ /api/scans/[id]/review
+├ ƒ /auth/callback
+├ ○ /my-resources
+├ ○ /privacy
+├ ○ /requests
+├ ƒ /resources/[id]
+└ ○ /share
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

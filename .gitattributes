@@ -1,0 +1,7 @@
+* text=auto
+*.md whitespace=-blank-at-eol
+*.pdf binary
+*.png binary
+*.webp binary
+*.woff2 binary
+output/qa/*.log whitespace=-blank-at-eol,-blank-at-eof
