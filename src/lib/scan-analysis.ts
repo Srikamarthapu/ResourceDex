@@ -1,4 +1,5 @@
 import { ScanRequestError, type ActiveAnalysis, type ScanPreview } from './scan-client';
+import type { AnalysisProgress } from './ai/analysis-progress';
 
 export interface AnalysisState {
   active: ActiveAnalysis | null;
@@ -8,6 +9,8 @@ export interface AnalysisState {
   otherPhoto: boolean;
   message: string;
   resultScanId: string | null;
+  progress: AnalysisProgress | null;
+  outcome: 'completed' | 'failed' | 'stopped' | null;
 }
 
 interface AnalysisTransport {
@@ -28,6 +31,8 @@ const idleState = (): AnalysisState => ({
   otherPhoto: false,
   message: '',
   resultScanId: null,
+  progress: null,
+  outcome: null,
 });
 
 /** Coordinates one server-owned attempt; aborting a browser request never implies cancellation. */
@@ -97,6 +102,8 @@ export class ScanAnalysisController {
       otherPhoto: active.scanId !== this.source?.scanId,
       message: '',
       resultScanId: null,
+      progress: active.progress || null,
+      outcome: null,
     });
     this.schedule();
   }
@@ -110,8 +117,15 @@ export class ScanAnalysisController {
         operationKey: scan.analysisOperationKey || '',
         startedAt: scan.analysisStartedAt || null,
         deadlineAt: scan.analysisDeadlineAt || null,
+        progress: scan.analysisProgress,
       });
       void this.check();
+    } else if (scan.analysisProgress) {
+      this.update({
+        progress: scan.analysisProgress,
+        outcome: scan.status === 'completed' ? 'completed' : 'failed',
+        message: scan.status === 'completed' ? '' : scan.error || '',
+      });
     }
   };
   start = (scan: ScanPreview, operationKey: string) => {
@@ -138,7 +152,7 @@ export class ScanAnalysisController {
       (result) => {
         if (generation !== this.generation) return;
         this.post = null;
-        this.receive({ ...scan, ...result });
+        this.receive({ ...scan, ...result, analysisProgress: result.analysisProgress });
       },
       (failure: unknown) => {
         if (generation !== this.generation) return;
@@ -169,10 +183,17 @@ export class ScanAnalysisController {
         operationKey: scan.analysisOperationKey || active.operationKey,
         startedAt: scan.analysisStartedAt || active.startedAt,
         deadlineAt: scan.analysisDeadlineAt || active.deadlineAt,
+        progress: scan.analysisProgress === undefined ? active.progress : scan.analysisProgress,
       };
       if (next.operationKey !== active.operationKey) this.adopt(next);
       else {
-        this.update({ active: next, confirmed: true, phase: 'running', message: '' });
+        this.update({
+          active: next,
+          confirmed: true,
+          phase: 'running',
+          progress: next.progress || null,
+          message: '',
+        });
         this.schedule();
       }
       return;
@@ -193,6 +214,9 @@ export class ScanAnalysisController {
       return;
     }
     const otherPhoto = scan.scanId !== this.source?.scanId;
+    const finishedNewAnalysis =
+      scan.status === 'completed' &&
+      (otherPhoto || scan.analysisVersion > (this.source?.analysisVersion || 0));
     this.invalidate();
     this.update({
       active: null,
@@ -211,6 +235,13 @@ export class ScanAnalysisController {
               ? ''
               : this.failureMessage),
       resultScanId: otherPhoto && scan.status === 'completed' ? scan.scanId : null,
+      progress:
+        this.observedRunning || finishedNewAnalysis
+          ? scan.analysisProgress === undefined
+            ? this.state.progress
+            : scan.analysisProgress
+          : null,
+      outcome: cancelled ? 'stopped' : finishedNewAnalysis ? 'completed' : 'failed',
     });
     if (!otherPhoto) this.onSettled(scan);
   }

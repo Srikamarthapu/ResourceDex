@@ -1,6 +1,7 @@
 import { createClientId } from './client-id';
 import { createBrowserSupabaseClient } from './supabase/browser';
 import type { DetectionCandidate, Bounds } from './ai/detection';
+import type { AnalysisProgress } from './ai/analysis-progress';
 
 export interface ScanPreview {
   scanId: string;
@@ -18,6 +19,7 @@ export interface ScanPreview {
   analysisOperationKey?: string | null;
   analysisStartedAt?: string | null;
   analysisDeadlineAt?: string | null;
+  analysisProgress?: AnalysisProgress | null;
   error?: string;
 }
 
@@ -26,6 +28,7 @@ export interface ActiveAnalysis {
   operationKey: string;
   startedAt: string | null;
   deadlineAt: string | null;
+  progress?: AnalysisProgress | null;
 }
 
 export class ScanRequestError extends Error {

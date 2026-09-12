@@ -2696,6 +2696,17 @@ main:focus {
   max-width: 65ch;
   font-size: 0.875rem;
 }
+.analysis-progress .analysis-model {
+  color: var(--green-dark);
+  font-weight: 650;
+  margin: .4rem 0;
+}
+.analysis-progress .analysis-fallbacks {
+  margin: .65rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--muted);
+  font-size: .8rem;
+}
 .analysis-progress .analysis-elapsed {
   display: flex;
   flex-wrap: wrap;

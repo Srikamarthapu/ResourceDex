@@ -1,0 +1,8 @@
+{
+  "testedAt": "2026-09-12T23:35:47.856Z",
+  "model": "gemini-3.8-flash",
+  "status": "failed",
+  "durationMs": 6320,
+  "code": "provider_unavailable",
+  "providerStatus": 503
+}

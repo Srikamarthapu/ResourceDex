@@ -622,8 +622,8 @@ export function ShareView() {
                   disabled={Boolean(analysis.active)}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
-                Send this photo to Google Gemini, or Kimi K3 on NVIDIA if Gemini is unavailable, to
-                help identify items. I’ll review and correct every suggestion.
+                Send this photo to Google Gemini 3.5 Flash, then Gemini 3.8 Flash or Kimi K3 on
+                NVIDIA if needed, to help identify items. I’ll review and correct every suggestion.
               </label>
               <p className="field-hint">
                 Backup identification can take up to about 3 minutes. You can stop it and add
@@ -725,10 +725,7 @@ export function ShareView() {
       {stage === 'items' && scan && (
         <>
           {scan.analysisModel?.startsWith('moonshotai/') && (
-            <Notice>
-              Kimi K3 identified these items because Gemini was unavailable. Review each suggestion
-              before continuing.
-            </Notice>
+            <Notice>Kimi K3 provided these suggestions. Review each one before continuing.</Notice>
           )}
           {scan.referenceStatus === 'unavailable' && (
             <Notice>

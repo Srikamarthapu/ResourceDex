@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DETECTION_PROMPT_VERSION, DETECTION_SCHEMA_VERSION } from '@/lib/ai/detection';
-import { AnalysisError } from '@/lib/ai/analysis-error';
+import { AnalysisError, throwIfAnalysisCancelled } from '@/lib/ai/analysis-error';
+import { readAnalysisProgress } from '@/lib/ai/analysis-progress';
 import {
   ANALYSIS_TIMEOUT_MESSAGE,
   expireOwnerAnalyses,
@@ -149,6 +150,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           now.getTime() + IDENTIFICATION_DEADLINE_MS + 5_000,
         ).toISOString(),
         analysis_error: null,
+        analysis_progress: null,
       })
       .eq('id', scan.id)
       .eq('owner_id', context.user.id)
@@ -165,7 +167,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (lockError || !locked) {
       const { data: active, error: activeError } = await context.admin
         .from('scans')
-        .select('id,analysis_operation_key,analysis_started_at,analysis_deadline_at')
+        .select(
+          'id,analysis_operation_key,analysis_started_at,analysis_deadline_at,analysis_progress',
+        )
         .eq('owner_id', context.user.id)
         .eq('status', 'analyzing')
         .maybeSingle();
@@ -183,6 +187,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             operationKey: active.analysis_operation_key,
             startedAt: active.analysis_started_at,
             deadlineAt: active.analysis_deadline_at,
+            progress: readAnalysisProgress(active.analysis_progress),
           },
         },
         409,
@@ -248,7 +253,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               409,
               'The stored photo changed. Upload it again before identifying items.',
             );
-          return identifyPhoto(bytes, attemptId, allowNvidia, signal);
+          return identifyPhoto(bytes, attemptId, allowNvidia, signal, async (progress) => {
+            throwIfAnalysisCancelled(signal);
+            const { data: updated, error } = await context.admin
+              .from('scans')
+              .update({ analysis_progress: progress })
+              .eq('id', scan.id)
+              .eq('owner_id', context.user.id)
+              .eq('status', 'analyzing')
+              .eq('analysis_operation_key', input.operationKey)
+              .select('id')
+              .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(5_000)]))
+              .maybeSingle();
+            throwIfAnalysisCancelled(signal);
+            if (error)
+              throw new ScanError(
+                503,
+                'The current identification status could not be saved. Try again.',
+              );
+            if (!updated)
+              throw new AnalysisError('cancelled', 'Identification stopped or was replaced.');
+          });
         },
       );
       const durableResult = {

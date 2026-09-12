@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminSupabase, createServerSupabase } from '../supabase/server';
+import { readAnalysisProgress } from './analysis-progress';
 import { AnalysisError } from './analysis-error';
 import { currentReferenceNotes } from './reference-retrieval';
 import { ImageValidationError } from '../images/normalize';
@@ -37,6 +38,7 @@ export type ScanRecord = {
   analysis_operation_key: string | null;
   analysis_deadline_at: string | null;
   analysis_started_at: string | null;
+  analysis_progress?: unknown;
   limit_reached: boolean;
   model: string | null;
   token_usage?: { grounding?: { status?: string } } | null;
@@ -141,6 +143,7 @@ export async function safeScanResponse(
         reference_notes: currentReferenceNotes(candidate.reference_notes),
       })),
     analysisModel: scan.model,
+    analysisProgress: readAnalysisProgress(scan.analysis_progress),
     referenceStatus,
     limitReached: scan.limit_reached,
     error: scan.analysis_error,

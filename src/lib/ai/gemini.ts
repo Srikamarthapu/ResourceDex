@@ -5,10 +5,20 @@ import { AnalysisError, throwIfAnalysisCancelled } from './analysis-error';
 export { AnalysisError } from './analysis-error';
 
 export const DETECTION_DEADLINE_MS = 30_000;
+export const GEMINI_PRIMARY_MODEL = 'gemini-3.5-flash';
+export const GEMINI_FALLBACK_MODEL = 'gemini-3.8-flash';
 
-export function getGeminiConfig() {
+export function getGeminiModels() {
+  return [
+    ...new Set([
+      process.env.GEMINI_MODEL?.trim() || GEMINI_PRIMARY_MODEL,
+      process.env.GEMINI_FALLBACK_MODEL?.trim() || GEMINI_FALLBACK_MODEL,
+    ]),
+  ];
+}
+
+export function getGeminiConfig(model = getGeminiModels()[0]) {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
   if (!apiKey || !model) {
     throw new AnalysisError(
       'not_configured',
@@ -18,11 +28,18 @@ export function getGeminiConfig() {
   return { apiKey, model };
 }
 
-export async function identifyItems(bytes: Buffer, runId: string, signal?: AbortSignal) {
+export async function identifyItems(
+  bytes: Buffer,
+  runId: string,
+  signal?: AbortSignal,
+  modelOverride?: string,
+  timeoutMs = DETECTION_DEADLINE_MS,
+) {
   throwIfAnalysisCancelled(signal);
-  const { apiKey, model } = getGeminiConfig();
+  const { apiKey, model } = getGeminiConfig(modelOverride);
+  const deadlineMs = Math.max(1, Math.min(DETECTION_DEADLINE_MS, timeoutMs));
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DETECTION_DEADLINE_MS);
+  const timer = setTimeout(() => controller.abort(), deadlineMs);
   try {
     const client = new GoogleGenAI({ apiKey });
     const response = await client.models.generateContent({
@@ -48,7 +65,7 @@ export async function identifyItems(bytes: Buffer, runId: string, signal?: Abort
         maxOutputTokens: 6000,
         abortSignal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
         httpOptions: {
-          timeout: DETECTION_DEADLINE_MS,
+          timeout: deadlineMs,
           retryOptions: { attempts: 1 },
         },
       },

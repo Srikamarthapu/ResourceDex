@@ -8,7 +8,7 @@ vi.mock('@google/genai', () => ({
   },
 }));
 
-import { identifyPhoto } from '../src/lib/ai/identify';
+import { IDENTIFICATION_DEADLINE_MS, identifyPhoto } from '../src/lib/ai/identify';
 import { DETECTION_DEADLINE_MS, identifyItems } from '../src/lib/ai/gemini';
 import { generateNvidiaJson, identifyItemsWithNvidia, NVIDIA_MODEL } from '../src/lib/ai/nvidia';
 
@@ -39,6 +39,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   vi.stubEnv('GEMINI_API_KEY', 'google-unit-fixture');
   vi.stubEnv('GEMINI_MODEL', 'gemini-unit-fixture');
+  vi.stubEnv('GEMINI_FALLBACK_MODEL', 'gemini-fallback-fixture');
   vi.stubEnv('NVIDIA_API_KEY', 'nvidia-unit-fixture');
   vi.stubEnv('NVIDIA_MODEL', NVIDIA_MODEL);
 });
@@ -65,6 +66,59 @@ describe('photo identification cancellation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('checks cancellation after progress persistence and before a second-model dispatch', async () => {
+    const controller = new AbortController();
+    generate.mockRejectedValueOnce({ status: 429 });
+    const progress = vi.fn().mockImplementation(async ({ model }) => {
+      if (model === 'gemini-fallback-fixture') controller.abort();
+    });
+    await expect(
+      identifyPhoto(image, 'test-run', true, controller.signal, progress),
+    ).rejects.toMatchObject({ code: 'cancelled' });
+    expect(generate).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('caps the complete three-model chain at the shared deadline', async () => {
+    vi.useFakeTimers();
+    generate.mockImplementation(
+      ({ config }) =>
+        new Promise((_resolve, reject) => {
+          config.abortSignal.addEventListener(
+            'abort',
+            () => reject(new Error('provider-timeout')),
+            { once: true },
+          );
+        }),
+    );
+    let nvidiaAborted = false;
+    fetchMock.mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            'abort',
+            () => {
+              nvidiaAborted = true;
+              reject(new Error('provider-timeout'));
+            },
+            { once: true },
+          );
+        }),
+    );
+    const started = Date.now();
+    const result = identifyPhoto(image, 'test-run', true);
+    const assertion = expect(result).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(DETECTION_DEADLINE_MS * 2);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(IDENTIFICATION_DEADLINE_MS - DETECTION_DEADLINE_MS * 2 - 1);
+    expect(nvidiaAborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+    expect(Date.now() - started).toBe(IDENTIFICATION_DEADLINE_MS);
+    expect(nvidiaAborted).toBe(true);
+  });
+
   it('cancels Gemini without interpreting the abort as a reason to invoke NVIDIA', async () => {
     const controller = new AbortController();
     let providerSignal: AbortSignal | undefined;
@@ -79,6 +133,7 @@ describe('photo identification cancellation', () => {
     );
     const result = identifyPhoto(image, 'test-run', true, controller.signal);
     const assertion = expect(result).rejects.toMatchObject({ code: 'cancelled' });
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
     controller.abort();
     await assertion;
     expect(providerSignal?.aborted).toBe(true);
@@ -96,6 +151,7 @@ describe('photo identification cancellation', () => {
     );
     const result = identifyPhoto(image, 'test-run', true, controller.signal);
     const assertion = expect(result).rejects.toMatchObject({ code: 'cancelled' });
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
     controller.abort();
     finish(googleSuccess);
     await assertion;
@@ -178,7 +234,7 @@ describe('photo identification cancellation', () => {
       candidates: [],
       tokenUsage: { fallback: { from: 'google', reason: 'timeout' } },
     });
-    await vi.advanceTimersByTimeAsync(DETECTION_DEADLINE_MS);
+    await vi.advanceTimersByTimeAsync(DETECTION_DEADLINE_MS * 2);
     await assertion;
     expect(controller.signal.aborted).toBe(false);
     expect(fetchMock).toHaveBeenCalledOnce();

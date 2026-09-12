@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -33,7 +34,8 @@ type Row = Record<string, unknown>;
 const scanId = '00000000-0000-4000-8000-000000000001';
 const operationKey = '00000000-0000-4000-8000-000000000002';
 const newerKey = '00000000-0000-4000-8000-000000000003';
-const imageHash = 'a'.repeat(64);
+const imageBytes = Buffer.from('isolated-image-fixture');
+const imageHash = createHash('sha256').update(imageBytes).digest('hex');
 let storedScan: Row;
 let previous: Row | null;
 let afterReplayRead: (() => void) | undefined;
@@ -63,6 +65,9 @@ class Query {
   }
   is(key: string, value: unknown) {
     return this.eq(key, value);
+  }
+  abortSignal() {
+    return this;
   }
   async maybeSingle() {
     if (this.table === 'analysis_attempts') {
@@ -225,4 +230,56 @@ it('keeps a replay of the active operation idempotent', async () => {
   });
   expect(committedClaims).toBe(0);
   expect(rpc).not.toHaveBeenCalled();
+});
+
+function permitFixtureAnalysis() {
+  rpc.mockImplementation(async (name: string) => {
+    if (name === 'reserve_analysis') return { data: operationKey, error: null };
+    if (name === 'complete_analysis') storedScan.status = 'completed';
+    return { data: true, error: null };
+  });
+  mocks.verifiedScanContext.mockResolvedValue({
+    user: { id: 'fixture-owner' },
+    admin: {
+      from: (table: string) => new Query(table),
+      rpc,
+      storage: {
+        from: () => ({ download: async () => ({ data: new Blob([imageBytes]), error: null }) }),
+      },
+    },
+  });
+}
+
+it('persists the dispatched model before returning its completed result', async () => {
+  permitFixtureAnalysis();
+  const progress = {
+    model: 'gemini-3.8-flash',
+    phase: 'identifying',
+    fallbacks: [{ from: 'gemini-3.5-flash', to: 'gemini-3.8-flash', reason: 'rate_limit' }],
+  };
+  mocks.identifyPhoto.mockImplementation(async (_bytes, _runId, _consent, _signal, onProgress) => {
+    await onProgress(progress);
+    expect(storedScan.analysis_progress).toEqual(progress);
+    return { candidates: [], limitReached: false, model: progress.model, tokenUsage: {} };
+  });
+  expect((await analyze()).status).toBe(200);
+  expect(storedScan.status).toBe('completed');
+  expect(storedScan.analysis_progress).toEqual(progress);
+});
+
+it('rejects a late model progress update after the run was stopped or replaced', async () => {
+  permitFixtureAnalysis();
+  const currentProgress = { model: 'gemini-3.5-flash', phase: 'identifying', fallbacks: [] };
+  mocks.identifyPhoto.mockImplementation(async (_bytes, _runId, _consent, _signal, onProgress) => {
+    storedScan.analysis_operation_key = newerKey;
+    storedScan.analysis_progress = currentProgress;
+    await onProgress({ model: 'moonshotai/kimi-k3', phase: 'references', fallbacks: [] });
+    throw new Error('Late progress must have been rejected.');
+  });
+  const response = await analyze();
+  expect(response.status).toBe(503);
+  expect((await response.json()).code).toBe('cancelled');
+  expect(storedScan.analysis_operation_key).toBe(newerKey);
+  expect(storedScan.analysis_progress).toEqual(currentProgress);
+  expect(rpc.mock.calls.some(([name]) => name === 'complete_analysis')).toBe(false);
 });

@@ -1,22 +1,23 @@
 # Photo identification and private images
 
-The pipeline uses Supabase private Storage, Google Gemini for primary identification, and NVIDIA-hosted `moonshotai/kimi-k3` as an explicitly consented backup. Both providers use the same perception prompt and validated candidate schema. Successful backup identification can add private retrieval-grounded reference notes. Manual listing creation remains available.
+The pipeline uses Supabase private Storage and tries Google `gemini-3.5-flash`, then `gemini-3.8-flash`, then NVIDIA-hosted `moonshotai/kimi-k3` when the preceding model is unavailable. NVIDIA processing requires the current provider consent. All three models use the same perception prompt and validated candidate schema. Successful Kimi identification can add private retrieval-grounded reference notes. Manual listing creation remains available.
 
 ## Configuration and deadlines
 
 - `GEMINI_API_KEY`: server-only Google API key.
-- `GEMINI_MODEL`: an exact image/JSON-capable model identifier verified for the account; no guessed default.
+- `GEMINI_MODEL`: primary model, defaulting to the verified `gemini-3.5-flash`.
+- `GEMINI_FALLBACK_MODEL`: the second verified Google model; the demo uses `gemini-3.8-flash` after `gemini-3.5-flash`.
 - `NVIDIA_API_KEY`: server-only NVIDIA NIM API key.
 - `NVIDIA_MODEL`: exact value `moonshotai/kimi-k3`. Other identifiers are rejected; earlier Kimi models are not silently substituted.
-- `AI_SCAN_MAX_COST_USD`: conservative allowance for the complete possible primary vision, backup vision, and reference attempt. Account for both providers' current pricing and output limits.
+- `AI_SCAN_MAX_COST_USD`: conservative allowance for both possible Google vision calls, Kimi vision, and its reference pass. Account for both providers' current pricing and output limits.
 - `AI_DAILY_BUDGET_USD`: maximum reserved allowances in a UTC day. Failed, timed-out, and stopped calls count because ending a request does not guarantee provider billing stops.
 - Supabase public URL/publishable key and server secret: see the environment template and [backend runbook](backend.md).
 
 `reserve_analysis` serializes budget checks in Postgres and enforces 10 attempts per owner per hour and 30 per UTC day. A partial unique index permits one running scan per owner. One reservation covers the bounded attempt; actual provider usage and fallback/retrieval metadata are recorded separately from that allowance.
 
-Google has a 30-second deadline, NVIDIA vision up to 120 seconds, and reference generation up to 45 seconds, all capped by a 165-second overall deadline. The persisted lease is 170 seconds; the analysis route allows 180 seconds. Lease/revision checks stop an expired run overwriting a newer result. Each inference is submitted once; NVIDIA's asynchronous 202 response is polled as the same request.
+Each Google model has a 30-second deadline, NVIDIA vision up to 120 seconds, and reference generation up to 45 seconds, all capped by a 165-second overall deadline. These limits do not add together: after two complete Google timeouts, approximately 105 seconds remain for Kimi and any reference pass. The persisted lease is 170 seconds; the analysis route allows 180 seconds. Lease/revision checks stop an expired run overwriting a newer result. Each model inference is submitted once; NVIDIA's asynchronous 202 response is polled as the same request.
 
-The backup runs after a Google 429, network failure, 5xx, timeout, or missing Google configuration, only when NVIDIA is configured and the current provider consent is present. Google authentication errors (401/403), malformed successful output, and refusals do not trigger fallback. A failed reference pass preserves successful vision results without inventing notes.
+The next configured model is tried after a 429, network failure, 5xx, timeout, or missing model configuration. NVIDIA is considered only when configured and the current provider consent is present. Google authentication errors (401/403), malformed successful output, and refusals do not trigger fallback. A failed reference pass preserves successful vision results without inventing notes.
 
 ## Browser contract
 
@@ -24,7 +25,7 @@ The backup runs after a Google 429, network failure, 5xx, timeout, or missing Go
 2. Upload bytes directly with Supabase `uploadToSignedUrl`; never proxy the allowed 10 MB photo through a Next.js request body.
 3. `POST /api/scans/:id/prepare` validates JPEG/PNG/WebP bytes, rejects images above 10 MB or 40 megapixels and animated inputs, rotates EXIF orientation, strips metadata, and produces a JPEG up to 2,048 pixels on its longest edge without enlargement. The raw upload is removed; only normalized previews are signed.
 4. Disclose Google image processing and NVIDIA backup processing before analysis. Send `{imageHash,operationKey,consent:true,providerConsent:"google-nvidia-v1"}` to `POST /api/scans/:id/analyze`. Legacy requests without `providerConsent` remain Google-only. Replaying a key restores its saved outcome; a deliberate new attempt uses a new UUID. Analysis never publishes anything.
-5. `GET /api/scans/:id` restores safe status, candidates, analysis/review versions, and a fresh five-minute image preview. The response includes the owned operation key, start time, and deadline. Expired work and its matching attempt become failed atomically. The browser polls while processing or reconnecting; a reload recovers persisted results or resumes status checks. Closing a tab does not explicitly cancel a run, although the hosting runtime may still interrupt it. Stored reference notes are rechecked against current sources before returning them.
+5. `GET /api/scans/:id` restores safe status, candidates, analysis/review versions, and a fresh five-minute image preview. The response includes the owned operation key, start time, deadline, and `analysisProgress`. Expired work and its matching attempt become failed atomically. The browser polls while processing or reconnecting; a reload recovers persisted results or resumes status checks. Closing a tab does not explicitly cancel a run, although the hosting runtime may still interrupt it. Stored reference notes are rechecked against current sources before returning them.
 6. `POST /api/scans/:id/review` accepts `{analysisVersion,expectedReviewVersion,candidates:[{candidateId,label,category,selected}]}`. Send the complete visible list, up to twelve entries. Omitted originals are retained as removed private entries. Corrections persist without replacing pixel evidence; changed names/categories clear reference notes. Manual IDs use `manual:<UUID>` and receive no invented observations or bounds. Stale analysis/review versions return HTTP 409. Earlier snapshots remain private after reruns.
 7. `POST /api/scans/:id/image` with `{operationKey,crop?}` creates a private approved derivative. Named crop coordinates use `x_min,y_min,x_max,y_max` on a 0–1000 scale. Valid detected items get separate crops; missing bounds and manual items retain the full photo. Owners can adjust/reset crops before publication.
 
@@ -36,9 +37,11 @@ Routes verify Auth/email and scan ownership before privileged access, reject cro
 
 The Share screen enables Stop after the server confirms the operation is running. Check status and automatic polling resolve slow or interrupted responses without issuing another inference. If a different photo is occupying the owner's single active slot, a 409 includes only that owner's active operation metadata. The current photo stays selected while the owner stops the earlier run or opens its completed review.
 
+Progress is persisted when a model call or reference pass actually starts. `scans.analysis_progress` is initially null, then contains `{model,phase,fallbacks}` with phase `identifying` or `references`. Each fallback records its actual source model, next model, and reason (`rate_limit`, `timeout`, `unavailable`, or `not_configured`). The owner-only response exposes it as `analysisProgress`; another active photo's 409 metadata includes the same value as `activeAnalysis.progress`. Elapsed time never invents a model switch or completion percentage. Progress updates require the matching active operation, so a stopped or replaced worker cannot change the displayed run.
+
 The worker checks its durable operation every 2.5 seconds and aborts Gemini, NVIDIA inference/status polling, and reference generation when stopped or replaced. This ends this app's processing and rejects late output; it cannot promise an upstream provider stops already scheduled computation. Cancellation is terminal and never triggers backup inference. Database status checks are bounded, and all polling is disposed when the worker finishes. Lease expiry remains the recovery path if a hosting instance disappears.
 
-Offline regression covers provider cancellation, late responses, reference-pass cancellation, monitor cleanup, and browser attempt state. The September 12 cancellation update passed the production build, lint, TypeScript, the disposable-account lifecycle test, and the desktop/320px browser recovery test. Route regressions also cover delayed duplicates, cancellation before reservation, and replay during a newer operation. No provider requests were required for these deterministic failure tests. The opt-in database test uses disposable accounts and no AI calls:
+Offline regression covers provider cancellation, late responses, reference-pass cancellation, monitor cleanup, and browser attempt state. The September 12 cancellation update passed the production build, lint, TypeScript, the disposable-account lifecycle test, and the desktop/320px browser recovery test. Route regressions also cover delayed duplicates, cancellation before reservation, and replay during a newer operation. `tests/e2e/analysis-recovery.spec.ts` additionally seeds explicit test-only progress transitions to verify model names, fallback reasons, reference phase, and Stop without making provider requests. These fixtures validate UI/data behavior, not model availability or latency. The opt-in database test uses disposable accounts and no AI calls:
 
 ```sh
 RUN_LIVE_ANALYSIS_LIFECYCLE_TESTS=1 npm test -- tests/analysis-lifecycle-live.test.ts
@@ -58,6 +61,8 @@ Full PRD published guidance remains pending: a 20–30-entry reviewed corpus, im
 
 On September 12, 2026:
 
+- The three-model update passed 175 offline tests, lint, TypeScript, the production build, and browser checks of persisted model transitions and Stop. Google lists `gemini-3.8-flash` for the configured account. Its live licensed-photo check returned HTTP 503 in 6.32 seconds; successful 3.8 vision remains unverified during that outage (`output/qa/gemini-3.8-smoke.json`). Deterministic tests cover that error falling through to Kimi, the two Google models under Google-only consent, progress persistence failure, cancellation, and the shared deadline.
+
 - `gemini-3.5-flash` completed the licensed tools-photo smoke in 6.4 seconds with five candidates (`output/qa/gemini-smoke.json`). The authenticated Gemini API smoke took 23.8 seconds and covered upload, normalization, persistence, ownership, corrections, revisions, and replay (`output/qa/photo-pipeline-smoke.json`).
 - Exact `moonshotai/kimi-k3` vision returned five localized candidates in 62.5 seconds (`output/qa/nvidia-smoke.json`). With a simulated Google 429 confined to the test, the real Kimi fallback/reference smoke passed in 53.4 seconds: 37.0 seconds for vision plus 16.4 seconds for references, with five localized items and two valid Habitat sources whose displayed notes matched the reviewed text and URLs (`output/qa/nvidia-fallback-smoke.json`). There is no production force-fallback switch.
 - The combined offline suite passed 113 tests with five opt-in tests skipped; lint, typecheck, and the production build passed. These results do not replace a new deployed-browser check or the required held-out 20-photo/100-object evaluation.
@@ -67,6 +72,7 @@ Live tests make real provider requests only when explicitly enabled:
 ```sh
 RUN_LIVE_AI_TESTS=1 npm test -- tests/ai-live.test.ts
 RUN_LIVE_PHOTO_API_TESTS=1 PHOTO_TEST_APP_URL=http://localhost:3012 npm test -- tests/ai-api-live.test.ts
+RUN_LIVE_GEMINI_FALLBACK_TESTS=1 npm test -- tests/gemini-fallback-live.test.ts
 RUN_LIVE_NVIDIA_TESTS=1 npm test -- tests/nvidia-live.test.ts
 RUN_LIVE_NVIDIA_FALLBACK_TESTS=1 npm test -- tests/ai-fallback-live.test.ts
 ```

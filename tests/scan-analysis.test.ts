@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ScanAnalysisController } from '../src/lib/scan-analysis';
 import { ScanRequestError, type ScanPreview } from '../src/lib/scan-client';
+import type { AnalysisProgress } from '../src/lib/ai/analysis-progress';
 
 const photo: ScanPreview = {
   scanId: 'current-photo',
@@ -72,6 +73,24 @@ afterEach(() => {
 const flush = async () => {
   await Promise.resolve();
   await Promise.resolve();
+};
+const primaryProgress: AnalysisProgress = {
+  model: 'gemini-3.5-flash',
+  phase: 'identifying',
+  fallbacks: [],
+};
+const secondProgress: AnalysisProgress = {
+  model: 'gemini-3.8-flash',
+  phase: 'identifying',
+  fallbacks: [{ from: 'gemini-3.5-flash', to: 'gemini-3.8-flash', reason: 'rate_limit' }],
+};
+const referenceProgress: AnalysisProgress = {
+  model: 'moonshotai/kimi-k3',
+  phase: 'references',
+  fallbacks: [
+    ...secondProgress.fallbacks,
+    { from: 'gemini-3.8-flash', to: 'moonshotai/kimi-k3', reason: 'timeout' },
+  ],
 };
 
 describe('server-owned identification lifecycle', () => {
@@ -269,5 +288,89 @@ describe('server-owned identification lifecycle', () => {
     expect(settled).not.toHaveBeenCalled();
     expect(controller.getSnapshot().active).toBeNull();
     expect(transport.analyze.mock.calls[0][2].aborted).toBe(true);
+  });
+
+  it('never labels a new attempt with the previous completed model before persisted progress arrives', async () => {
+    const { controller, transport, pending } = setup();
+    const old = completed({ analysisProgress: referenceProgress });
+    transport.get.mockResolvedValue(old);
+    controller.restore(old);
+    expect(controller.getSnapshot().outcome).toBe('completed');
+    controller.start(old, 'new-attempt');
+    await flush();
+    expect(controller.getSnapshot().progress).toBeNull();
+    pending.resolve(running('new-attempt', { analysisProgress: primaryProgress }));
+    await flush();
+    expect(controller.getSnapshot().progress).toEqual(primaryProgress);
+    expect(controller.getSnapshot().outcome).toBeNull();
+  });
+
+  it('restores persisted model progress and follows fallback and reference updates through status checks', async () => {
+    const { controller, transport } = setup();
+    transport.get.mockResolvedValue(running('attempt-a', { analysisProgress: primaryProgress }));
+    controller.restore(running('attempt-a', { analysisProgress: primaryProgress }));
+    await flush();
+    expect(controller.getSnapshot().progress).toEqual(primaryProgress);
+    transport.get.mockResolvedValueOnce(running('attempt-a', { analysisProgress: secondProgress }));
+    await controller.check();
+    expect(controller.getSnapshot().progress).toEqual(secondProgress);
+    transport.get.mockResolvedValueOnce(
+      running('attempt-a', { analysisProgress: referenceProgress }),
+    );
+    await controller.check();
+    expect(controller.getSnapshot().progress).toEqual(referenceProgress);
+    await controller.stop();
+    expect(controller.getSnapshot().progress).toEqual(referenceProgress);
+    expect(controller.getSnapshot().outcome).toBe('stopped');
+  });
+
+  it('retains the finished model and history after completion and a reload', async () => {
+    const { controller, transport, pending } = setup();
+    transport.get.mockResolvedValueOnce(
+      running('attempt-a', { analysisProgress: referenceProgress }),
+    );
+    controller.start(photo, 'attempt-a');
+    await flush();
+    const result = completed({ analysisProgress: referenceProgress });
+    pending.resolve(result);
+    await flush();
+    expect(controller.getSnapshot().outcome).toBe('completed');
+    expect(controller.getSnapshot().progress).toEqual(referenceProgress);
+    controller.restore(result);
+    expect(controller.getSnapshot().progress).toEqual(referenceProgress);
+    expect(controller.getSnapshot().outcome).toBe('completed');
+  });
+
+  it('restores the failure reason alongside the last saved model after reload', () => {
+    const { controller } = setup();
+    controller.restore({
+      ...photo,
+      status: 'failed',
+      analysisProgress: referenceProgress,
+      error: 'Identification stopped. Your photo and saved review are unchanged.',
+    });
+    expect(controller.getSnapshot().outcome).toBe('failed');
+    expect(controller.getSnapshot().message).toContain('Identification stopped');
+    expect(controller.getSnapshot().progress).toEqual(referenceProgress);
+  });
+
+  it('uses409 progress from the other photo without changing the selected photo', async () => {
+    const { controller, transport, pending, settled } = setup();
+    const status = deferred<ScanPreview>();
+    transport.get.mockReturnValue(status.promise);
+    controller.start(photo, 'attempt-a');
+    pending.reject(
+      new ScanRequestError('Already running', 409, 'analysis_running', {
+        scanId: 'older-photo',
+        operationKey: 'older-attempt',
+        startedAt: null,
+        deadlineAt: null,
+        progress: secondProgress,
+      }),
+    );
+    await flush();
+    expect(controller.getSnapshot().otherPhoto).toBe(true);
+    expect(controller.getSnapshot().progress).toEqual(secondProgress);
+    expect(settled).not.toHaveBeenCalled();
   });
 });

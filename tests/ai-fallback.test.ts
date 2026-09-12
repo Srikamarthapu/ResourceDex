@@ -46,6 +46,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   vi.stubEnv('GEMINI_API_KEY', 'google-unit-fixture');
   vi.stubEnv('GEMINI_MODEL', 'gemini-unit-fixture');
+  vi.stubEnv('GEMINI_FALLBACK_MODEL', 'gemini-fallback-fixture');
   vi.stubEnv('NVIDIA_API_KEY', 'nvidia-unit-fixture');
   vi.stubEnv('NVIDIA_MODEL', NVIDIA_MODEL);
 });
@@ -99,7 +100,10 @@ describe('consented photo identification fallback', () => {
       },
     });
     expect(JSON.stringify(result)).not.toContain('private-');
-    expect(generate).toHaveBeenCalledOnce();
+    expect(generate.mock.calls.map(([request]) => request.model)).toEqual([
+      'gemini-unit-fixture',
+      'gemini-fallback-fixture',
+    ]);
     expect(ground).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const groundingPayload = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
@@ -117,6 +121,129 @@ describe('consented photo identification fallback', () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(ground).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the second Gemini model with Google-only consent and reports the transition', async () => {
+    generate.mockRejectedValueOnce({ status: 429 }).mockResolvedValueOnce({
+      text: JSON.stringify({ candidates: [candidate] }),
+      candidates: [{ finishReason: 'STOP' }],
+      usageMetadata: { totalTokenCount: 123 },
+    });
+    const progress = vi.fn().mockResolvedValue(undefined);
+    const result = await identifyPhoto(
+      Buffer.from('fixture'),
+      'test-run',
+      false,
+      undefined,
+      progress,
+    );
+    expect(result).toMatchObject({
+      model: 'gemini-fallback-fixture',
+      tokenUsage: {
+        provider: 'google',
+        fallbacks: [
+          { from: 'gemini-unit-fixture', to: 'gemini-fallback-fixture', reason: 'rate_limit' },
+        ],
+        failures: [{ model: 'gemini-unit-fixture', code: 'provider_unavailable', status: 429 }],
+      },
+    });
+    expect(progress.mock.calls.map(([value]) => value.model)).toEqual([
+      'gemini-unit-fixture',
+      'gemini-fallback-fixture',
+    ]);
+    expect(generate.mock.calls[0][0].contents).toEqual(generate.mock.calls[1][0].contents);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ground).not.toHaveBeenCalled();
+  });
+
+  it('records both Google failures and reports Kimi vision then references in order', async () => {
+    generate.mockRejectedValueOnce({ status: 429 }).mockRejectedValueOnce({ status: 503 });
+    fetchMock.mockResolvedValueOnce(nvidiaResult({ candidates: [candidate] }));
+    ground.mockImplementation(async (candidates) => ({
+      candidates,
+      status: 'no_evidence',
+      sourceIds: [],
+    }));
+    const progress = vi.fn().mockResolvedValue(undefined);
+    const result = await identifyPhoto(
+      Buffer.from('fixture'),
+      'test-run',
+      true,
+      undefined,
+      progress,
+    );
+    const expectedFallbacks = [
+      { from: 'gemini-unit-fixture', to: 'gemini-fallback-fixture', reason: 'rate_limit' },
+      { from: 'gemini-fallback-fixture', to: NVIDIA_MODEL, reason: 'unavailable' },
+    ];
+    expect(progress.mock.calls.map(([value]) => [value.model, value.phase])).toEqual([
+      ['gemini-unit-fixture', 'identifying'],
+      ['gemini-fallback-fixture', 'identifying'],
+      [NVIDIA_MODEL, 'identifying'],
+      [NVIDIA_MODEL, 'references'],
+    ]);
+    expect(result.tokenUsage).toMatchObject({
+      fallbacks: expectedFallbacks,
+      failures: [
+        { model: 'gemini-unit-fixture', code: 'provider_unavailable', status: 429 },
+        { model: 'gemini-fallback-fixture', code: 'provider_unavailable', status: 503 },
+      ],
+    });
+    expect(progress.mock.calls[3][0].fallbacks).toEqual(expectedFallbacks);
+  });
+
+  it.each([401, 403])(
+    'does not pass a second Gemini authentication error (%s) to Kimi',
+    async (status) => {
+      generate.mockRejectedValueOnce({ status: 429 }).mockRejectedValueOnce({ status });
+      await expect(identifyPhoto(Buffer.from('fixture'), 'test-run', true)).rejects.toMatchObject({
+        code: 'provider_unavailable',
+        providerStatus: status,
+      });
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not pass refused second-Gemini output to Kimi', async () => {
+    generate.mockRejectedValueOnce({ status: 503 }).mockResolvedValueOnce({
+      text: '{"candidates":[]}',
+      candidates: [{ finishReason: 'SAFETY' }],
+    });
+    await expect(identifyPhoto(Buffer.from('fixture'), 'test-run', true)).rejects.toMatchObject({
+      code: 'invalid_output',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never turns a progress persistence failure into another model dispatch', async () => {
+    generate.mockRejectedValueOnce({ status: 429 });
+    const failure = new AnalysisError('provider_unavailable', 'Progress persistence failed');
+    failure.providerStatus = 503;
+    const progress = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(failure);
+    await expect(
+      identifyPhoto(Buffer.from('fixture'), 'test-run', true, undefined, progress),
+    ).rejects.toBe(failure);
+    expect(generate).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow reference-phase progress failures as successful unavailable grounding', async () => {
+    generate.mockRejectedValue({ status: 503 });
+    fetchMock.mockResolvedValueOnce(nvidiaResult({ candidates: [candidate] }));
+    const failure = new Error('Reference progress persistence failed');
+    const progress = vi
+      .fn()
+      .mockResolvedValue(undefined)
+      .mockImplementation(async ({ phase }) => {
+        if (phase === 'references') throw failure;
+      });
+    await expect(
+      identifyPhoto(Buffer.from('fixture'), 'test-run', true, undefined, progress),
+    ).rejects.toBe(failure);
+    expect(ground).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('does not replace a Gemini authentication error with another provider', async () => {

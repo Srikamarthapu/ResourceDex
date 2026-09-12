@@ -74,6 +74,7 @@ test('another active photo can be stopped without losing the current photo, and 
     const activeKey = randomUUID();
     const startedAt = new Date().toISOString();
     const deadlineAt = new Date(Date.now() + 150_000).toISOString();
+    const primaryProgress = { model: 'gemini-3.5-flash', phase: 'identifying', fallbacks: [] };
     await must(
       admin
         .from('scans')
@@ -82,6 +83,7 @@ test('another active photo can be stopped without losing the current photo, and 
           analysis_operation_key: activeKey,
           analysis_started_at: startedAt,
           analysis_deadline_at: deadlineAt,
+          analysis_progress: primaryProgress,
         })
         .eq('id', otherPhoto.id)
         .eq('owner_id', ownerId),
@@ -120,8 +122,81 @@ test('another active photo can be stopped without losing the current photo, and 
     });
     expect(Date.parse(activeAnalysis.startedAt)).toBe(Date.parse(startedAt));
     expect(Date.parse(activeAnalysis.deadlineAt)).toBe(Date.parse(deadlineAt));
+    expect(activeAnalysis.progress).toEqual(primaryProgress);
     await expect(
       page.getByRole('heading', { name: 'Another photo is being identified', exact: true }),
+    ).toBeVisible();
+    const progress = page.getByRole('region', { name: 'Identification progress' });
+    await expect(progress.getByText('Using Gemini 3.5 Flash', { exact: true })).toBeVisible();
+    const firstFallback = {
+      from: 'gemini-3.5-flash',
+      to: 'gemini-3.8-flash',
+      reason: 'rate_limit',
+    };
+    // Deterministic fixture updates exercise the persisted progress contract.
+    // These transitions are not provider observations and make no AI requests.
+    await must(
+      admin
+        .from('scans')
+        .update({
+          analysis_progress: {
+            model: 'gemini-3.8-flash',
+            phase: 'identifying',
+            fallbacks: [firstFallback],
+          },
+        })
+        .eq('id', otherPhoto.id)
+        .eq('owner_id', ownerId)
+        .eq('analysis_operation_key', activeKey),
+    );
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await expect(progress.getByText('Using Gemini 3.8 Flash', { exact: true })).toBeVisible();
+    await expect(
+      progress.getByText('Gemini 3.5 Flash hit a rate limit → switched to Gemini 3.8 Flash.', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    const secondFallback = {
+      from: 'gemini-3.8-flash',
+      to: 'moonshotai/kimi-k3',
+      reason: 'timeout',
+    };
+    await must(
+      admin
+        .from('scans')
+        .update({
+          analysis_progress: {
+            model: 'moonshotai/kimi-k3',
+            phase: 'identifying',
+            fallbacks: [firstFallback, secondFallback],
+          },
+        })
+        .eq('id', otherPhoto.id)
+        .eq('owner_id', ownerId)
+        .eq('analysis_operation_key', activeKey),
+    );
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await expect(progress.getByText('Using Kimi K3', { exact: true })).toBeVisible();
+    await expect(
+      progress.getByText('Gemini 3.8 Flash timed out → switched to Kimi K3.', { exact: true }),
+    ).toBeVisible();
+    await must(
+      admin
+        .from('scans')
+        .update({
+          analysis_progress: {
+            model: 'moonshotai/kimi-k3',
+            phase: 'references',
+            fallbacks: [firstFallback, secondFallback],
+          },
+        })
+        .eq('id', otherPhoto.id)
+        .eq('owner_id', ownerId)
+        .eq('analysis_operation_key', activeKey),
+    );
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await expect(
+      progress.getByText('Kimi K3 is checking references', { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Add details myself', exact: true }),
@@ -153,6 +228,7 @@ test('another active photo can be stopped without losing the current photo, and 
     );
     await page.getByRole('button', { name: 'Stop identification', exact: true }).click();
     expect((await (await stopped).json()).cancelled).toBe(true);
+    await expect(progress.getByText('Stopped while using Kimi K3', { exact: true })).toBeVisible();
     await expect(
       page.getByText('Identification stopped. Your photo and saved review are unchanged.', {
         exact: true,
@@ -211,6 +287,7 @@ test('another active photo can be stopped without losing the current photo, and 
           analysis_started_at: new Date().toISOString(),
           analysis_deadline_at: new Date(Date.now() + 150_000).toISOString(),
           analysis_error: null,
+          analysis_progress: primaryProgress,
         })
         .eq('id', otherPhoto.id)
         .eq('owner_id', ownerId),
