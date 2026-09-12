@@ -157,7 +157,9 @@ export function Explore() {
         <div className="catalog-hero">
           <div className="hero-copy">
             <p className="eyebrow">
-              <span style={{ width: 5, height: 5, background: '#718457', borderRadius: '50%' }} />{' '}
+              <span
+                style={{ width: 5, height: 5, background: 'var(--leaf)', borderRadius: '50%' }}
+              />{' '}
               The community material exchange
             </p>
             <h1>

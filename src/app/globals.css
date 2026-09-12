@@ -5,13 +5,18 @@
 :root {
   --paper: #fafaf6;
   --surface: #fff;
-  --ink: #26382c;
-  --muted: #697167;
-  --green: #355c3f;
-  --green-dark: #294a32;
-  --sage: #e9eee3;
-  --line: #e1e4db;
-  --soft: #f2f3ed;
+  --ink: #263b28;
+  --muted: #5e6f5c;
+  --green: #3b762f;
+  --green-dark: #2e6027;
+  --leaf: #5f913f;
+  --green-focus: #5c8e43;
+  --green-line: #cedfbe;
+  --sage: #eaf2e3;
+  --line: #dce5d5;
+  --soft: #f2f6ed;
+  --hero: #e6f1d4;
+  --hero-heading: #4b7b32;
   --ochre: #a87635;
   --radius: 16px;
   --font-body: 'DM Sans Variable', sans-serif;
@@ -90,11 +95,11 @@ p {
   color: var(--muted);
 }
 :focus-visible {
-  outline: 3px solid #7d9869;
+  outline: 3px solid var(--green-focus);
   outline-offset: 4px;
 }
 ::selection {
-  background: #dfeacd;
+  background: #d9edc5;
 }
 svg {
   flex-shrink: 0;
@@ -156,7 +161,7 @@ main:focus {
   font-weight: 460;
 }
 .brand-dot {
-  color: #8d9d69;
+  color: var(--leaf);
 }
 .desktop-nav {
   display: flex;
@@ -255,8 +260,8 @@ main:focus {
 }
 .avatar {
   list-style: none;
-  border: 1px solid #ccd4c4;
-  background: #e8eddf;
+  border: 1px solid var(--green-line);
+  background: var(--sage);
   width: 39px;
   height: 39px;
   border-radius: 50%;
@@ -387,7 +392,7 @@ main:focus {
 }
 .notice {
   background: var(--sage);
-  border: 1px solid #d8e0cc;
+  border: 1px solid var(--green-line);
   border-radius: 10px;
   padding: 13px 17px;
   font-size: 13px;
@@ -464,7 +469,7 @@ main:focus {
   letter-spacing: 0.13em;
   font-size: 10px;
   font-weight: 650;
-  color: #777f72;
+  color: var(--muted);
   margin: 0 12px 14px;
 }
 .category-list {
@@ -491,7 +496,7 @@ main:focus {
 }
 .category-button.selected {
   background: var(--sage);
-  border-color: #dce4d3;
+  border-color: var(--green-line);
   color: var(--green);
   font-weight: 650;
 }
@@ -512,10 +517,10 @@ main:focus {
   margin: 32px 5px 0;
   padding: 21px 16px;
   border-radius: 12px;
-  background: #eff1e7;
+  background: var(--soft);
 }
 .sidebar-tip > svg {
-  color: #73865e;
+  color: var(--leaf);
   margin-bottom: 12px;
 }
 .sidebar-tip h3 {
@@ -541,7 +546,7 @@ main:focus {
 }
 .sidebar-footnote {
   font-size: 11px;
-  color: #757e6c;
+  color: var(--muted);
   line-height: 1.6;
   padding: 20px 12px;
 }
@@ -554,7 +559,7 @@ main:focus {
   position: relative;
   overflow: hidden;
   border-radius: 17px;
-  background: #e8eddc;
+  background: var(--hero);
   min-height: 229px;
   margin-bottom: 28px;
   padding: 29px 34px;
@@ -577,14 +582,14 @@ main:focus {
   font-weight: 620;
 }
 .hero-copy h1 span {
-  color: #5c7450;
+  color: var(--hero-heading);
 }
 .hero-copy > p:not(.eyebrow) {
   font-size: 12px;
   line-height: 1.65;
   max-width: 305px;
   margin-top: 12px;
-  color: #67725b;
+  color: var(--muted);
 }
 .hero-copy .text-link {
   margin-top: 10px;
@@ -602,13 +607,13 @@ main:focus {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  filter: saturate(0.65);
+  filter: saturate(0.85);
 }
 .hero-art:after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, #e8eddc 0%, #e8eddc10 45%);
+  background: linear-gradient(90deg, var(--hero) 0%, transparent 45%);
 }
 .hero-note {
   position: absolute;
@@ -826,7 +831,7 @@ main:focus {
   font-size: 9px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #78806f;
+  color: var(--muted);
   margin-bottom: 5px;
 }
 .card-title-row {
@@ -860,7 +865,7 @@ main:focus {
   align-items: center;
   gap: 6px;
   font-size: 10px;
-  color: #72796c;
+  color: var(--muted);
   margin-top: 12px;
 }
 .card-meta > span {
@@ -884,7 +889,7 @@ main:focus {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #6f8a50;
+  background: var(--leaf);
 }
 .status.reserved:before {
   background: #bc8c4c;
@@ -895,9 +900,9 @@ main:focus {
   background: #8b9184;
 }
 .status.pill {
-  background: #eff3e9;
+  background: var(--sage);
   color: var(--green);
-  border: 1px solid #dce4d3;
+  border: 1px solid var(--green-line);
   border-radius: 20px;
   padding: 5px 10px;
 }
@@ -1043,8 +1048,8 @@ main:focus {
   font-size: 13px;
 }
 .detail-actions {
-  background: #f0f2e9;
-  border: 1px solid #e0e5d6;
+  background: var(--soft);
+  border: 1px solid var(--green-line);
   border-radius: 12px;
   padding: 19px;
   display: grid;
@@ -1205,8 +1210,8 @@ main:focus {
 .form-field input:focus,
 .form-field textarea:focus,
 .form-field select:focus {
-  border-color: #8a9d76;
-  box-shadow: 0 0 0 3px #e7eddf;
+  border-color: var(--green-focus);
+  box-shadow: 0 0 0 3px var(--sage);
 }
 .field-hint {
   font-size: 11px;
@@ -1291,7 +1296,7 @@ main:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #7e8677;
+  color: var(--muted);
 }
 .step:before {
   counter-increment: step;
@@ -1321,7 +1326,7 @@ main:focus {
 }
 .upload-area {
   border: 1.5px dashed #b9c4ab;
-  background: #f0f3e8;
+  background: var(--soft);
   border-radius: 17px;
   min-height: 290px;
   display: flex;
@@ -1334,10 +1339,10 @@ main:focus {
   cursor: pointer;
 }
 .upload-area:hover {
-  background: #e9efde;
+  background: var(--sage);
 }
 .upload-area > svg {
-  color: #6e8556;
+  color: var(--leaf);
   margin-bottom: 5px;
 }
 .upload-area h2 {
@@ -1490,8 +1495,8 @@ main:focus {
   gap: 12px;
 }
 .candidate.selected {
-  border-color: #8f9e7e;
-  background: #f5f7ee;
+  border-color: var(--green-focus);
+  background: var(--soft);
 }
 .candidate input[type='checkbox'] {
   margin-top: 5px;
@@ -1690,7 +1695,7 @@ main:focus {
   white-space: nowrap;
 }
 .request-state.accepted {
-  background: #e4edd9;
+  background: var(--sage);
   color: var(--green);
 }
 .request-state.pending {
@@ -1941,7 +1946,11 @@ main:focus {
     max-width: 350px;
   }
   .hero-art:after {
-    background: linear-gradient(90deg, #e8eddc, #e8eddc50 100%);
+    background: linear-gradient(
+      90deg,
+      var(--hero),
+      color-mix(in srgb, var(--hero) 31%, transparent)
+    );
   }
   .hero-note {
     display: none;
@@ -2069,7 +2078,7 @@ main:focus {
     justify-content: center;
     gap: 5px;
     font-size: 9px;
-    color: #717a69;
+    color: var(--muted);
   }
   .mobile-nav a.active {
     color: var(--green);
@@ -2115,7 +2124,7 @@ main:focus {
   }
   .mobile-categories button.selected {
     background: var(--sage);
-    border-color: #c8d4b9;
+    border-color: var(--green-line);
     color: var(--green);
   }
   .catalog-hero {
@@ -2145,7 +2154,11 @@ main:focus {
     opacity: 0.42;
   }
   .hero-art:after {
-    background: linear-gradient(90deg, #e8eddc, #e8eddc30);
+    background: linear-gradient(
+      90deg,
+      var(--hero),
+      color-mix(in srgb, var(--hero) 19%, transparent)
+    );
   }
   .search-toolbar {
     margin-bottom: 16px;
